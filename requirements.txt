@@ -47,3 +47,4 @@ wheel
 icecream
 types-PyYAML
 webdataset
+psycopg
