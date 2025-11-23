@@ -1,11 +1,8 @@
 import webdataset as wds
-import time
 import os
-from tqdm import tqdm
 
 os.environ["WDS_VERBOSE_CACHE"] = "1"
 os.environ["GOPEN_VERBOSE"] = "0"
-
 
 
 def skip(exc, sample=None, key=None, url=None):
