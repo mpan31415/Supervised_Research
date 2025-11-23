@@ -209,3 +209,5 @@ __marimo__/
 
 .vscode/
 checkpoints/
+*.err
+*.out
