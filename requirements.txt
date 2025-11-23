@@ -48,3 +48,5 @@ icecream
 types-PyYAML
 webdataset
 psycopg
+scikit-learn
+linformer
