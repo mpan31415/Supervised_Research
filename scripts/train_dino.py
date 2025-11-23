@@ -1,7 +1,7 @@
 from torchvision import transforms
 import torch
 from torch import nn, optim
-from vit_pytorch import ViT, MAE
+from vit_pytorch import ViT, Dino
 
 import webdataset as wds
 import time
@@ -18,7 +18,7 @@ print("device: ", device)
 print("=" * 50)
 print("=" * 50)
 print("=" * 50)
-print("\n          Starting MAE training ...\n")
+print("\n          Starting DINO training ...\n")
 print("=" * 50)
 print("=" * 50)
 print("=" * 50)
@@ -122,16 +122,24 @@ v = ViT(
     mlp_dim = 2048
 )
 
-# MAE with ViT encoder
-mae = MAE(
-    encoder = v,
-    masking_ratio = 0.75,   # the paper recommended 75% masked patches
-    decoder_dim = 512,      # paper showed good results with just 512
-    decoder_depth = 6       # anywhere from 1 to 8
+# DINO with ViT backbone
+dino = Dino(
+    v,
+    image_size = 256,
+    hidden_layer = 'to_latent',        # hidden layer name or index, from which to extract the embedding
+    projection_hidden_size = 256,      # projector network hidden dimension
+    projection_layers = 4,             # number of layers in projection network
+    num_classes_K = 65336,             # output logits dimensions (referenced as K in paper)
+    student_temp = 0.9,                # student temperature
+    teacher_temp = 0.04,               # teacher temperature, needs to be annealed from 0.04 to 0.07 over 30 epochs
+    local_upper_crop_scale = 0.4,      # upper bound for local crop - 0.4 was recommended in the paper 
+    global_lower_crop_scale = 0.5,     # lower bound for global crop - 0.5 was recommended in the paper
+    moving_average_decay = 0.9,        # moving average of encoder - paper showed anywhere from 0.9 to 0.999 was ok
+    center_moving_average_decay = 0.9, # moving average of teacher centers - paper showed anywhere from 0.9 to 0.999 was ok
 ).to(device)
 
 # optimizer
-optimizer = optim.SGD(mae.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+optimizer = torch.optim.Adam(dino.parameters(), lr = 3e-4)
 
 print("Finished step 4 in", time.time() - tic, "seconds")
 
@@ -157,15 +165,18 @@ for epoch in range(NUM_EPOCHS):
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        loss = mae(inputs)
+        loss = dino(inputs)
         loss.backward()
         optimizer.step()
+        
+        # update moving average of teacher encoder and teacher centers
+        dino.update_moving_average()
 
         print(" [%3d,%3d] loss: %.5f" % (epoch + 1, i + 1, loss.item()))
         
     # save encoder checkpoint
     if (epoch + 1) % CHECKPOINT_EVERY == 0:
-        ckpt_path = "/cluster/home/jiapan/Supervised_Research/checkpoints/mae/"
+        ckpt_path = "/cluster/home/jiapan/Supervised_Research/checkpoints/dino/"
         torch.save(v.state_dict(), os.path.join(ckpt_path, f"encoder_epoch_{epoch+1}.pth"))
         print(f"Saved checkpoint for epoch {epoch+1}")
 
