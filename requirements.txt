@@ -50,3 +50,4 @@ webdataset
 psycopg
 scikit-learn
 linformer
+vit-pytorch

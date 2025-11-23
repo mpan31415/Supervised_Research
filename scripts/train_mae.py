@@ -17,7 +17,7 @@ print("device: ", device)
 
 ################## TRAIN PARAMS ##################
 BATCH_SIZE = 32
-NUM_EPOCHS = 100
+NUM_EPOCHS = 30
 BATCHES_PER_EPOCH = 70
 
 
@@ -132,7 +132,7 @@ for epoch in range(NUM_EPOCHS):
         loss.backward()
         optimizer.step()
 
-        print("[%d, %5d] loss: %.5f" % (epoch + 1, i + 1, loss.item()))
+        print(" [%3d,%3d] loss: %.5f" % (epoch + 1, i + 1, loss.item()))
         
     # save encoder checkpoint after each epoch
     ckpt_path = "/cluster/home/jiapan/Supervised_Research/checkpoints/"
