@@ -28,4 +28,5 @@ export PYTHONUNBUFFERED=1
 
 # run script
 #python /cluster/home/jiapan/Supervised_Research/scripts/train.py mae
-python /cluster/home/jiapan/Supervised_Research/scripts/train.py dino
+#python /cluster/home/jiapan/Supervised_Research/scripts/train.py dino
+python /cluster/home/jiapan/Supervised_Research/scripts/train.py simmim

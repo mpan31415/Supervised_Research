@@ -1,4 +1,6 @@
 from vit_pytorch import ViT, MAE, Dino
+from vit_pytorch.mpp import MPP
+from vit_pytorch.simmim import SimMIM
 from torch import nn, optim
 import torch
 import os
@@ -63,16 +65,29 @@ def create_model(type: str, device: str) -> nn.Module:
         # optimizer = optim.Adam(model.parameters(), lr=3e-4)
         optimizer = optim.Adam(model.parameters(), lr=5e-3)
     
-    # MP3
-    elif type == "mp3":
-        pass  # Placeholder for MP3 model creation
+    # MPP
+    elif type == "mpp":
+        pass
     
     # simMIM
     elif type == "simmim":
-        pass  # Placeholder for simMIM model creation
+        encoder = ViT(
+            image_size = 256,
+            patch_size = 32,
+            num_classes = 1000,
+            dim = 1024,
+            depth = 6,
+            heads = 8,
+            mlp_dim = 2048
+        )
+        model = SimMIM(
+            encoder = encoder,
+            masking_ratio = 0.5  # they found 50% to yield the best results
+        ).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=5e-3)
     
     else:
-        raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino', 'mp3', 'simmim'.")
+        raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino', 'mpp', 'simmim'.")
     
     return encoder, model, optimizer
 
