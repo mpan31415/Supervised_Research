@@ -97,6 +97,10 @@ if __name__ == "__main__":
             loss = model(inputs)
             loss.backward()
             optimizer.step()
+            
+            # DINO moving average update
+            if MODEL_TYPE == "dino":
+                model.update_moving_average()
 
             print(" [%3d,%3d] loss: %.5f" % (epoch + 1, i + 1, loss.item()))
             

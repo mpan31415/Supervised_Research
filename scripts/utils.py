@@ -61,7 +61,7 @@ def create_model(type: str, device: str) -> nn.Module:
             center_moving_average_decay = 0.9, # moving average of teacher centers - paper showed anywhere from 0.9 to 0.999 was ok
         ).to(device)
         # optimizer = optim.Adam(model.parameters(), lr=3e-4)
-        optimizer = optim.Adam(model.parameters(), lr=3e-3)
+        optimizer = optim.Adam(model.parameters(), lr=5e-3)
     
     # MP3
     elif type == "mp3":
