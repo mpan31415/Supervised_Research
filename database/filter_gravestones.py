@@ -15,9 +15,9 @@ cur = con.cursor()
 cur.execute("SET search_path TO gravestones;")
 
 sql = """
-SELECT *
-FROM gravestones.graveyards
-LIMIT 20;
+SELECT fag_id, is_gravestone
+FROM gravestones.memorials 
+LIMIT 50;
 """
 
 logging.info("executing")
