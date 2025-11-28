@@ -18,7 +18,8 @@ import random
 import logging
 import time
 from io import BytesIO
-from typing import List, Tuple, Optional, Set
+from typing import List, Tuple
+from pathlib import Path
 
 import psycopg
 from PIL import Image  # optional: to validate image bytes if desired
@@ -28,14 +29,13 @@ CONFIG = {
     # file system
     "root_dir": "/cluster/work/lawecon_repo/gravestones/shards/images",   # root containing many subdirs with .tar shards
     "output_dir": "/cluster/home/jiapan/new_dataset",      # where to write new shards
-    "output_dir": "/cluster/home/jiapan/new_dataset",      # where to write new shards
     "output_prefix": "gravestones_shard",             # e.g. gravestones_shard_00001.tar
     # "images_per_output_shard": 2000,                  # adjust to taste; 2k is reasonable
     "images_per_output_shard": 50,                  # adjust to taste; 2k is reasonable
     "allowed_extensions": (".jpg", ".jpeg", ".png"),
     "shuffle_seed": 42,                               # for reproducibility; set None for non-deterministic
 
-    # DB (is_gravestone filtering)
+    # DB
     "db": {
         "host": "id-hdb-psgr-cp7.ethz.ch",
         "dbname": "led",
@@ -77,13 +77,9 @@ def connect_db(db_cfg: dict):
     return conn
 
 
-def is_gravestone(conn: psycopg.Connection, image_id: str, table: str = "gravestones.tarfiles_map") -> bool:
+def is_gravestone(conn: psycopg.Connection, image_id: str) -> bool:
     """
-    Query DB A to determine if image_id is a gravestone.
-    Modify SQL to match your schema: assumes a boolean column 'is_gravestone' OR lookups available.
-    Example SQLs (adjust to your actual DB schema):
-      - If the DB stores a boolean: SELECT is_gravestone FROM images_table WHERE image_id = %s
-      - If your schema is different, change this function accordingly.
+    Query DB to determine if image_id is a gravestone.
     """
     sql = "SELECT is_gravestone FROM gravestones.memorials WHERE fag_id = %s LIMIT 1"
     try:
@@ -94,6 +90,23 @@ def is_gravestone(conn: psycopg.Connection, image_id: str, table: str = "gravest
                 return bool(row[0])
             else:
                 return False
+    except Exception as e:
+        # If DB query fails, log and treat as not a gravestone to avoid stopping entire pipeline.
+        logger.exception("DB query failed for image_id=%s: %s", image_id, e)
+        return False
+    
+    
+def get_first_tarfile_dir_name(conn: psycopg.Connection, image_id: str) -> bool:
+    """
+    Query DB to determine the parent dir name of the first tarfile that contains image_id.
+    """
+    sql = "SELECT tar_name FROM gravestones.tarfiles_map WHERE html_fagid = %s LIMIT 1"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (image_id,))
+            row = cur.fetchone()
+            dir_name = row[0]
+            return dir_name
     except Exception as e:
         # If DB query fails, log and treat as not a gravestone to avoid stopping entire pipeline.
         logger.exception("DB query failed for image_id=%s: %s", image_id, e)
@@ -165,7 +178,6 @@ def process_shards(
 
     # bookkeeping
     accepted_count = 0
-    seen_ids: Set[str] = set()
     out_shard_idx = 0
     out_shard_writer, out_shard_path = open_new_output_shard(output_dir, prefix, out_shard_idx)
     current_out_count = 0
@@ -176,6 +188,7 @@ def process_shards(
 
     for tar_path in tar_paths:
         shard_counter += 1
+        dir_name = Path(tar_path).parent.name
         logger.info("Opening shard %d/%d: %s", shard_counter, total_shards, tar_path)
         try:
             with tarfile.open(tar_path, "r") as tar_in:
@@ -204,10 +217,6 @@ def process_shards(
                     else:
                         image_id = name_no_ext
 
-                    # skip duplicates we've already added
-                    if image_id in seen_ids:
-                        continue
-
                     # read raw bytes
                     try:
                         fobj = tar_in.extractfile(member)
@@ -226,8 +235,10 @@ def process_shards(
                             logger.debug("Invalid image bytes for %s (skipping)", member.name)
                             continue
 
-                    # query DB whether gravestone
-                    if is_gravestone(conn, image_id):
+                    # need 2 conditions
+                    # 1. is a gravestone
+                    # 2. first dir name is same as current dir name
+                    if is_gravestone(conn, image_id) and (get_first_tarfile_dir_name(conn, image_id) == dir_name):
                         # add to current output shard
                         try:
                             # Resize before storing (3x256x256)
@@ -249,7 +260,6 @@ def process_shards(
                             logger.exception("Failed to write image %s to output shard", image_id)
                             continue
 
-                        seen_ids.add(image_id)
                         accepted_count += 1
                         current_out_count += 1
 
