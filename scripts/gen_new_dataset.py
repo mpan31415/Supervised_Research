@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 """
 Create a new dataset of gravestone images by streaming images from many .tar shards.
-- Walks root_dir recursively to find .tar files
-- Shuffles shard order and member order inside each shard
-- For each image found, extracts image_id (filename w/o extension)
-- Queries DB_A for whether it's a gravestone (boolean)
-- If True and not already added, writes the raw image bytes into output tar shards
-- Stops when target_count images have been collected
-
-Requirements:
-  pip install psycopg pillow numpy
 """
 
 import os
@@ -22,35 +13,24 @@ from typing import List, Tuple
 from pathlib import Path
 
 import psycopg
-from PIL import Image  # optional: to validate image bytes if desired
+from PIL import Image
 
 # ---------------- CONFIG ----------------
 CONFIG = {
-    # file system
-    "root_dir": "/cluster/work/lawecon_repo/gravestones/shards/images",   # root containing many subdirs with .tar shards
-    "output_dir": "/cluster/home/jiapan/new_dataset",      # where to write new shards
-    "output_prefix": "gravestones_shard",             # e.g. gravestones_shard_00001.tar
-    # "images_per_output_shard": 2000,                  # adjust to taste; 2k is reasonable
-    "images_per_output_shard": 50,                  # adjust to taste; 2k is reasonable
+    "root_dir": "/cluster/work/lawecon_repo/gravestones/shards/images",
+    "output_dir": "/cluster/home/jiapan/new_dataset",
+    "output_prefix": "gravestones_shard",
+    
+    "target_count": 2_000_000,
+    "images_per_output_shard": 2000,
     "allowed_extensions": (".jpg", ".jpeg", ".png"),
-    "shuffle_seed": 42,                               # for reproducibility; set None for non-deterministic
+    "shuffle_seed": 42,
 
-    # DB
     "db": {
         "host": "id-hdb-psgr-cp7.ethz.ch",
         "dbname": "led",
         "user": "jiapan",
     },
-
-    # Dataset target
-    # "target_count": 2_000_000,  # goal number of gravestone images
-    # "target_count": 10_000,  # goal number of gravestone images
-    "target_count": 250,  # goal number of gravestone images
-
-    # Safety / logging
-    # "log_every": 1000,          # log progress every N accepted images
-    "log_every": 50,          # log progress every N accepted images
-    "validate_images": False,   # if True, will try to open images with PIL to ensure validity (slower)
 }
 # ----------------------------------------
 
@@ -58,8 +38,77 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(mes
 logger = logging.getLogger("collector")
 
 
+# ---------------- DB WITH RETRY ----------------
+
+def connect_db_with_retry(db_cfg: dict, retry_delay=5):
+    kwargs = {k: v for k, v in db_cfg.items() if v is not None}
+    while True:
+        try:
+            conn = psycopg.connect(**kwargs)
+            conn.autocommit = True
+            logger.info("Connected to database.")
+            return conn
+        except Exception as e:
+            logger.error("DB connection failed: %s. Retrying in %ds...", e, retry_delay)
+            time.sleep(retry_delay)
+
+
+def safe_db_query(conn: psycopg.Connection, sql: str, params: tuple):
+    while True:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                return cur.fetchone()
+        except Exception as e:
+            logger.error("DB query failed (%s). Reconnecting...", e)
+            try:
+                conn.close()
+            except Exception:
+                pass
+            time.sleep(2)
+            conn = connect_db_with_retry(CONFIG["db"])
+
+
+def is_gravestone(conn: psycopg.Connection, image_id: str) -> bool:
+    sql = "SELECT is_gravestone FROM gravestones.memorials WHERE fag_id = %s LIMIT 1"
+    row = safe_db_query(conn, sql, (image_id,))
+    return bool(row and row[0])
+
+
+def get_first_tarfile_dir_name(conn: psycopg.Connection, image_id: str):
+    sql = "SELECT tar_name FROM gravestones.tarfiles_map WHERE html_fagid = %s LIMIT 1"
+    row = safe_db_query(conn, sql, (image_id,))
+    return row[0] if row else None
+
+
+# ---------------- IMAGE UTILS ----------------
+
+def resize_image_bytes(img_bytes: bytes, size=(256, 256), output_format="JPEG", quality=95) -> bytes:
+    with Image.open(BytesIO(img_bytes)) as img:
+        img = img.convert("RGB")
+        img = img.resize(size, Image.BILINEAR)
+        out_buf = BytesIO()
+        if output_format.upper() == "JPEG":
+            img.save(out_buf, format="JPEG", quality=quality, subsampling=0)
+        else:
+            img.save(out_buf, format="PNG")
+        return out_buf.getvalue()
+
+
+def add_image_to_shard(tar_writer: tarfile.TarFile, img_bytes: bytes, name_in_tar: str):
+    bio = BytesIO(img_bytes)
+    tinfo = tarfile.TarInfo(name=name_in_tar)
+    bio.seek(0, os.SEEK_END)
+    tinfo.size = bio.tell()
+    bio.seek(0)
+    tinfo.mtime = int(time.time())
+    tinfo.mode = 0o644
+    tar_writer.addfile(tinfo, bio)
+
+
+# ---------------- SHARD UTILS ----------------
+
 def gather_tar_paths(root_dir: str) -> List[str]:
-    """Recursively find all .tar files under root_dir."""
     tar_paths = []
     for dirpath, _, filenames in os.walk(root_dir):
         for fn in filenames:
@@ -68,87 +117,7 @@ def gather_tar_paths(root_dir: str) -> List[str]:
     return tar_paths
 
 
-def connect_db(db_cfg: dict):
-    """Return a psycopg.Connection. Caller should close it."""
-    # Build connect args - allow optional password / port keys
-    kwargs = {k: v for k, v in db_cfg.items() if v is not None}
-    conn = psycopg.connect(**kwargs)
-    conn.autocommit = True
-    return conn
-
-
-def is_gravestone(conn: psycopg.Connection, image_id: str) -> bool:
-    """
-    Query DB to determine if image_id is a gravestone.
-    """
-    sql = "SELECT is_gravestone FROM gravestones.memorials WHERE fag_id = %s LIMIT 1"
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (image_id,))
-            row = cur.fetchone()
-            if row and row[0] is not None:
-                return bool(row[0])
-            else:
-                return False
-    except Exception as e:
-        # If DB query fails, log and treat as not a gravestone to avoid stopping entire pipeline.
-        logger.exception("DB query failed for image_id=%s: %s", image_id, e)
-        return False
-    
-    
-def get_first_tarfile_dir_name(conn: psycopg.Connection, image_id: str) -> bool:
-    """
-    Query DB to determine the parent dir name of the first tarfile that contains image_id.
-    """
-    sql = "SELECT tar_name FROM gravestones.tarfiles_map WHERE html_fagid = %s LIMIT 1"
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (image_id,))
-            row = cur.fetchone()
-            dir_name = row[0]
-            return dir_name
-    except Exception as e:
-        # If DB query fails, log and treat as not a gravestone to avoid stopping entire pipeline.
-        logger.exception("DB query failed for image_id=%s: %s", image_id, e)
-        return False
-
-
-def resize_image_bytes(img_bytes: bytes, size=(256, 256), output_format="JPEG", quality=95) -> bytes:
-    """
-    Decode image bytes, convert to RGB, resize to (256,256),
-    and re-encode to JPEG (or PNG).
-    """
-    with Image.open(BytesIO(img_bytes)) as img:
-        img = img.convert("RGB")
-        img = img.resize(size, Image.BILINEAR)
-
-        out_buf = BytesIO()
-        if output_format.upper() == "JPEG":
-            img.save(out_buf, format="JPEG", quality=quality, subsampling=0)
-        else:
-            img.save(out_buf, format="PNG")
-
-        return out_buf.getvalue()
-
-
-def add_image_to_shard(tar_writer: tarfile.TarFile, img_bytes: bytes, name_in_tar: str):
-    """
-    Add an image represented by img_bytes into the open tar_writer.
-    name_in_tar should be like '<image_id>.jpg'
-    """
-    bio = BytesIO(img_bytes)
-    tinfo = tarfile.TarInfo(name=name_in_tar)
-    bio.seek(0, os.SEEK_END)
-    tinfo.size = bio.tell()
-    bio.seek(0)
-    tinfo.mtime = int(time.time())
-    # set a default filemode readable
-    tinfo.mode = 0o644
-    tar_writer.addfile(tinfo, bio)
-
-
 def open_new_output_shard(output_dir: str, prefix: str, idx: int) -> Tuple[tarfile.TarFile, str]:
-    """Open a new tar file for writing and return (TarFile, path)."""
     os.makedirs(output_dir, exist_ok=True)
     fname = f"{prefix}_{idx:06d}.tar"
     path = os.path.join(output_dir, fname)
@@ -157,202 +126,103 @@ def open_new_output_shard(output_dir: str, prefix: str, idx: int) -> Tuple[tarfi
     return tar, path
 
 
-def process_shards(
-    tar_paths: List[str],
-    conn: psycopg.Connection,
-    cfg: dict,
-):
-    """
-    Main streaming loop:
-      - iterate tar_paths (shuffled)
-      - for each tar, open and list members (filter by extension), shuffle member order
-      - for each member, extract raw bytes, derive image_id, query DB, and if positive add to output shards
-      - stop when target_count reached
-    """
+# ---------------- MAIN PIPELINE ----------------
+
+def process_shards(tar_paths: List[str], conn: psycopg.Connection, cfg: dict):
+
     allowed_ext = tuple(e.lower() for e in cfg["allowed_extensions"])
     target = cfg["target_count"]
     images_per_shard = cfg["images_per_output_shard"]
     output_dir = cfg["output_dir"]
     prefix = cfg["output_prefix"]
-    validate_images = cfg["validate_images"]
 
-    # bookkeeping
     accepted_count = 0
     out_shard_idx = 0
     out_shard_writer, out_shard_path = open_new_output_shard(output_dir, prefix, out_shard_idx)
     current_out_count = 0
     shard_start_time = time.time()
 
-    total_shards = len(tar_paths)
-    shard_counter = 0
-
     for tar_path in tar_paths:
-        shard_counter += 1
         dir_name = Path(tar_path).parent.name
-        logger.info("Opening shard %d/%d: %s", shard_counter, total_shards, tar_path)
         try:
             with tarfile.open(tar_path, "r") as tar_in:
-                # gather eligible members
-                members = [m for m in tar_in.getmembers() if m.isfile() and os.path.splitext(m.name)[1].lower() in allowed_ext]
-                if not members:
-                    continue
-
-                # shuffle members
+                members = [
+                    m for m in tar_in.getmembers()
+                    if m.isfile() and os.path.splitext(m.name)[1].lower() in allowed_ext
+                ]
                 random.shuffle(members)
 
                 for member in members:
-                    # stop early if we've reached our target
                     if accepted_count >= target:
                         break
 
                     base = os.path.basename(member.name)
-                    if not base:
-                        continue
+                    name_no_ext, _ = os.path.splitext(base)
 
-                    name_no_ext, ext = os.path.splitext(base)
+                    image_id = name_no_ext[:-2] if name_no_ext.endswith("_0") else name_no_ext
 
-                    # Strip trailing "_0" if present
-                    if name_no_ext.endswith("_0"):
-                        image_id = name_no_ext[:-2]
-                    else:
-                        image_id = name_no_ext
-
-                    # read raw bytes
                     try:
                         fobj = tar_in.extractfile(member)
-                        if fobj is None:
-                            continue
                         img_bytes = fobj.read()
                     except Exception:
-                        logger.exception("Failed to read member %s in %s", member.name, tar_path)
                         continue
 
-                    # optional validation (slower)
-                    if validate_images:
+                    if is_gravestone(conn, image_id) and (
+                        get_first_tarfile_dir_name(conn, image_id) == dir_name
+                    ):
                         try:
-                            _ = Image.open(BytesIO(img_bytes)).convert("RGB")
-                        except Exception:
-                            logger.debug("Invalid image bytes for %s (skipping)", member.name)
-                            continue
-
-                    # need 2 conditions
-                    # 1. is a gravestone
-                    # 2. first dir name is same as current dir name
-                    if is_gravestone(conn, image_id) and (get_first_tarfile_dir_name(conn, image_id) == dir_name):
-                        # add to current output shard
-                        try:
-                            # Resize before storing (3x256x256)
-                            try:
-                                resized_bytes = resize_image_bytes(
-                                    img_bytes,
-                                    size=(256, 256),
-                                    output_format="JPEG",   # or "PNG"
-                                    quality=95
-                                )
-                            except Exception:
-                                logger.exception("Resize failed for %s", base)
-                                continue
-                            
-                            # add downsized image
+                            resized_bytes = resize_image_bytes(img_bytes)
                             add_image_to_shard(out_shard_writer, resized_bytes, base)
-                            
                         except Exception:
-                            logger.exception("Failed to write image %s to output shard", image_id)
                             continue
 
                         accepted_count += 1
                         current_out_count += 1
 
-                        # logging
-                        if accepted_count % cfg["log_every"] == 0:
-                            logger.info("Accepted %d images so far (target %d)", accepted_count, target)
-
-                        # rotate output shard if full
                         if current_out_count >= images_per_shard:
-                            out_shard_writer.close()
-                            
-                            shard_elapsed = time.time() - shard_start_time
-                            imgs_per_sec = current_out_count / max(shard_elapsed, 1e-6)
-                            
                             logger.info(
-                                "Closed output shard %s | images=%d | time=%.2f s | throughput=%.2f img/s",
-                                out_shard_path,
-                                current_out_count,
-                                shard_elapsed,
-                                imgs_per_sec,
+                                f"Collected {accepted_count} images so far. "
+                                f"This shard took {time.time() - shard_start_time:.2f}s."
                             )
-                            
+                            out_shard_writer.close()
                             out_shard_idx += 1
-                            out_shard_writer, out_shard_path = open_new_output_shard(output_dir, prefix, out_shard_idx)
+                            out_shard_writer, out_shard_path = open_new_output_shard(
+                                output_dir, prefix, out_shard_idx
+                            )
                             current_out_count = 0
-                            shard_start_time = time.time()   # reset timer for next shard
+                            shard_start_time = time.time()
 
-                # check after finishing members of this input shard
                 if accepted_count >= target:
                     break
+
         except Exception:
-            logger.exception("Failed to open/process tar: %s", tar_path)
-            continue
+            logger.exception("Failed to process %s", tar_path)
 
-        if accepted_count >= target:
-            break
-
-    # finalize: close current writer and if empty remove it
-    try:
-        final_elapsed = time.time() - shard_start_time
-        final_imgs_per_sec = current_out_count / max(final_elapsed, 1e-6)
-
-        out_shard_writer.close()
-
-        logger.info(
-            "Final output shard %s | images=%d | time=%.2f s | throughput=%.2f img/s",
-            out_shard_path,
-            current_out_count,
-            final_elapsed,
-            final_imgs_per_sec,
-        )
-        # if last shard is empty remove it
-        if current_out_count == 0:
-            try:
-                os.remove(out_shard_path)
-                logger.info("Removed empty final shard: %s", out_shard_path)
-            except OSError:
-                pass
-    except Exception:
-        logger.exception("Failed to finalize output shard")
-
-    logger.info("Done. Collected %d images (target was %d).", accepted_count, target)
+    out_shard_writer.close()
+    logger.info("Done. Collected %d images.", accepted_count)
     return accepted_count
 
 
+# ---------------- ENTRY ----------------
+
 def main():
     cfg = CONFIG
-
     if cfg["shuffle_seed"] is not None:
         random.seed(cfg["shuffle_seed"])
 
-    logger.info("Gathering tar paths under %s ...", cfg["root_dir"])
     tar_paths = gather_tar_paths(cfg["root_dir"])
-    if not tar_paths:
-        logger.error("No .tar shards found under %s", cfg["root_dir"])
-        return
-
-    logger.info("Found %d input shards.", len(tar_paths))
-    # shuffle the shard order for randomness
     random.shuffle(tar_paths)
 
-    # connect to DB
-    try:
-        conn = connect_db(cfg["db"])
-    except Exception as e:
-        logger.exception("Failed to connect to DB: %s", e)
-        return
+    conn = connect_db_with_retry(cfg["db"])
 
     try:
         start = time.time()
         accepted = process_shards(tar_paths, conn, cfg)
         elapsed = time.time() - start
-        logger.info("Finished. Collected %d images in %.2f seconds (%.2f imgs/s)", accepted, elapsed, accepted / max(elapsed, 1e-6))
+        logger.info(
+            "Finished. Collected %d images in %.2fs (%.2f img/s)",
+            accepted, elapsed, accepted / max(elapsed, 1e-6)
+        )
     finally:
         try:
             conn.close()
