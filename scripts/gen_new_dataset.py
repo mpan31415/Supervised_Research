@@ -146,6 +146,7 @@ def process_shards(tar_paths: List[str], conn: psycopg.Connection, cfg: dict):
         dir_name = Path(tar_path).parent.name
         try:
             with tarfile.open(tar_path, "r") as tar_in:
+                logger.info("Processing input shard: %s", tar_path)
                 members = [
                     m for m in tar_in.getmembers()
                     if m.isfile() and os.path.splitext(m.name)[1].lower() in allowed_ext
