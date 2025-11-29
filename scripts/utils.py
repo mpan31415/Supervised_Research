@@ -18,7 +18,7 @@ def create_model(type: str, device: str) -> nn.Module:
     print("=" * 50)
     print("=" * 50)
     
-    # MAE
+    ######################## MAE ########################
     if type == "mae":
         encoder = ViT(
             image_size = 256,
@@ -37,39 +37,46 @@ def create_model(type: str, device: str) -> nn.Module:
         ).to(device)
         optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
         
-    # DINO
+    ######################## DINO ########################
     elif type == "dino":
         encoder = ViT(
             image_size = 256,
-            patch_size = 32,
+            patch_size = 16,
             num_classes = 1000,
-            dim = 1024,
-            depth = 6,
-            heads = 8,
-            mlp_dim = 2048
+            dim = 384,
+            depth = 12,
+            heads = 6,
+            mlp_dim = 1536
         )
+        # REMOVE classifier head for DINO
+        encoder.mlp_head = torch.nn.Identity()
+        
         model = Dino(
             encoder,
             image_size = 256,
-            hidden_layer = 'to_latent',        # hidden layer name or index, from which to extract the embedding
-            projection_hidden_size = 256,      # projector network hidden dimension
-            projection_layers = 4,             # number of layers in projection network
-            num_classes_K = 65336,             # output logits dimensions (referenced as K in paper)
-            student_temp = 0.9,                # student temperature
-            teacher_temp = 0.04,               # teacher temperature, needs to be annealed from 0.04 to 0.07 over 30 epochs
-            local_upper_crop_scale = 0.4,      # upper bound for local crop - 0.4 was recommended in the paper 
-            global_lower_crop_scale = 0.5,     # lower bound for global crop - 0.5 was recommended in the paper
-            moving_average_decay = 0.9,        # moving average of encoder - paper showed anywhere from 0.9 to 0.999 was ok
-            center_moving_average_decay = 0.9, # moving average of teacher centers - paper showed anywhere from 0.9 to 0.999 was ok
+            hidden_layer = 'to_latent',          # hidden layer name or index, from which to extract the embedding
+            projection_hidden_size = 512,        # projector network hidden dimension
+            projection_layers = 3,               # number of layers in projection network
+            num_classes_K = 65336,               # output logits dimensions (referenced as K in paper)
+            student_temp = 0.1,                  # student temperature
+            teacher_temp = 0.04,                 # teacher temperature, needs to be annealed from 0.04 to 0.07 over 30 epochs
+            local_upper_crop_scale = 0.4,        # upper bound for local crop - 0.4 was recommended in the paper 
+            global_lower_crop_scale = 0.4,       # lower bound for global crop - 0.5 was recommended in the paper
+            moving_average_decay = 0.996,        # moving average of encoder - paper showed anywhere from 0.9 to 0.999 was ok
+            center_moving_average_decay = 0.99,  # moving average of teacher centers - paper showed anywhere from 0.9 to 0.999 was ok
         ).to(device)
-        # optimizer = optim.Adam(model.parameters(), lr=3e-4)
-        optimizer = optim.Adam(model.parameters(), lr=5e-3)
+        
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr = 1e-4,
+            weight_decay = 0.04
+        )
     
-    # MPP
+    ######################## MPP ########################
     elif type == "mpp":
         pass
     
-    # simMIM
+    ######################## simMIM ########################
     elif type == "simmim":
         encoder = ViT(
             image_size = 256,
@@ -86,6 +93,7 @@ def create_model(type: str, device: str) -> nn.Module:
         ).to(device)
         optimizer = optim.Adam(model.parameters(), lr=5e-3)
     
+    ######################## ERROR ########################
     else:
         raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino', 'mpp', 'simmim'.")
     

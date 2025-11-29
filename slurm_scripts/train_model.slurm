@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=train_model
-#SBATCH --output=out_%A_%a.out
-#SBATCH --error=err_%A_%a.err
+#SBATCH --output=train_%A_%a.out
+#SBATCH --error=train_%A_%a.err
 #SBATCH --time=24:00:00
 
 #SBATCH --nodes=1
@@ -28,5 +28,5 @@ export PYTHONUNBUFFERED=1
 
 # run script
 #python /cluster/home/jiapan/Supervised_Research/scripts/train.py mae
-#python /cluster/home/jiapan/Supervised_Research/scripts/train.py dino
-python /cluster/home/jiapan/Supervised_Research/scripts/train.py simmim
+python /cluster/home/jiapan/Supervised_Research/scripts/train.py dino
+#python /cluster/home/jiapan/Supervised_Research/scripts/train.py simmim

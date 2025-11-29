@@ -211,3 +211,4 @@ __marimo__/
 checkpoints/
 *.err
 *.out
+logs/

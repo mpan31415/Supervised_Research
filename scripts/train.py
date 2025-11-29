@@ -32,15 +32,15 @@ if __name__ == "__main__":
 
 
     ################## TRAIN PARAMS ##################
-    BATCH_SIZE = 256     # 4096 in original paper
+    BATCH_SIZE = 128     # 4096 in original paper
     NUM_EPOCHS = 10
-    BATCHES_PER_EPOCH = int(222060 / BATCH_SIZE)
+    BATCHES_PER_EPOCH = int(200_000 / BATCH_SIZE)
     CHECKPOINT_EVERY = 1
 
 
     ################# 1. DATA LOADING #################
-    ALL_DATA_DIR = "/cluster/work/lawecon_repo/gravestones/shards/images/transfer_2025-05-18_084428/"
-    dataset_shards = "transfer_2025-05-18_084428_image_shard-{000000..000103}.tar"
+    ALL_DATA_DIR = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/images/"
+    dataset_shards = "gravestones_shard_{000000..000099}.tar"
     # create webdataset object
     dataset = wds.WebDataset(ALL_DATA_DIR + dataset_shards, resampled=True, shardshuffle=True).shuffle(1000).decode("pil", handler=decoder_skip)
 
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     ################# 2. DEFINE TRANSFORMS #################
     transform_train = transforms.Compose(
         [   
-            transforms.Resize((256, 256)),
+            # transforms.Resize((256, 256)),
             # transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
