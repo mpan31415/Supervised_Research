@@ -124,7 +124,13 @@ def main():
     )
 
     model = model.to(DEVICE)
-    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+    model = DDP(
+        model,
+        device_ids=[local_rank],
+        output_device=local_rank,
+        find_unused_parameters=True,
+        broadcast_buffers=True,
+    )
 
     ################# 5. TRAIN #################
     tic = time.time()
@@ -175,10 +181,16 @@ def main():
                 )
                 os.makedirs(ckpt_path, exist_ok=True)
 
-                torch.save(
-                    model.module.net.state_dict(),
-                    os.path.join(ckpt_path, f"encoder_step_{global_step}.pth")
-                )
+                if MODEL_TYPE == "mae":
+                    torch.save(
+                        model.module.encoder.state_dict(),
+                        os.path.join(ckpt_path, f"encoder_step_{global_step}.pth")
+                    )
+                elif MODEL_TYPE == "dino":
+                    torch.save(
+                        model.module.net.state_dict(),
+                        os.path.join(ckpt_path, f"encoder_step_{global_step}.pth")
+                    )
 
                 print(f"Saved checkpoint at step {global_step}")
 

@@ -39,4 +39,4 @@ export OMP_NUM_THREADS=1
 ##############################
 torchrun --nproc_per_node=4 \
   /cluster/home/jiapan/Supervised_Research/scripts/train_distributed.py \
-  /cluster/home/jiapan/Supervised_Research/scripts/config/dino.yaml
+  /cluster/home/jiapan/Supervised_Research/scripts/config/train.yaml

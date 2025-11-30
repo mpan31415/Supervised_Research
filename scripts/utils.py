@@ -22,20 +22,29 @@ def create_model(type: str, device: str) -> nn.Module:
     if type == "mae":
         encoder = ViT(
             image_size = 256,
-            patch_size = 32,
+            patch_size = 16,
             num_classes = 1000,
-            dim = 1024,
-            depth = 6,
-            heads = 8,
-            mlp_dim = 2048
+            dim = 768,
+            depth = 12,
+            heads = 12,
+            mlp_dim = 3072
         )
+        # REMOVE classifier head for DINO
+        encoder.mlp_head = torch.nn.Identity()
+        
         model = MAE(
             encoder = encoder,
             masking_ratio = 0.75,   # the paper recommended 75% masked patches
             decoder_dim = 512,      # paper showed good results with just 512
             decoder_depth = 6       # anywhere from 1 to 8
         ).to(device)
-        optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+        
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=1.5e-4,
+            betas=(0.9, 0.95),
+            weight_decay=0.05
+        )
         
     ######################## DINO ########################
     elif type == "dino":
@@ -43,10 +52,10 @@ def create_model(type: str, device: str) -> nn.Module:
             image_size = 256,
             patch_size = 16,
             num_classes = 1000,
-            dim = 384,
+            dim = 768,
             depth = 12,
-            heads = 6,
-            mlp_dim = 1536
+            heads = 12,
+            mlp_dim = 3072
         )
         # REMOVE classifier head for DINO
         encoder.mlp_head = torch.nn.Identity()
