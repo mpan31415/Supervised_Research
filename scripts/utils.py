@@ -27,7 +27,7 @@ def create_model(type: str, device: str) -> nn.Module:
             dim = 768,
             depth = 12,
             heads = 12,
-            mlp_dim = 3072
+            mlp_dim = 1536
         )
         # REMOVE classifier head for DINO
         encoder.mlp_head = torch.nn.Identity()
@@ -55,7 +55,7 @@ def create_model(type: str, device: str) -> nn.Module:
             dim = 768,
             depth = 12,
             heads = 12,
-            mlp_dim = 3072
+            mlp_dim = 1536
         )
         # REMOVE classifier head for DINO
         encoder.mlp_head = torch.nn.Identity()
@@ -89,12 +89,12 @@ def create_model(type: str, device: str) -> nn.Module:
     elif type == "simmim":
         encoder = ViT(
             image_size = 256,
-            patch_size = 32,
+            patch_size = 16,
             num_classes = 1000,
-            dim = 1024,
-            depth = 6,
-            heads = 8,
-            mlp_dim = 2048
+            dim = 768,
+            depth = 12,
+            heads = 12,
+            mlp_dim = 1536
         )
         model = SimMIM(
             encoder = encoder,

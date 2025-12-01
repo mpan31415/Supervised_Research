@@ -54,7 +54,7 @@ def main():
     BATCHES_PER_EPOCH = int(TOTAL_SAMPLES / (BATCH_SIZE * world_size))
 
     PRINT_EVERY_STEPS = cfg["training"]["print_every_steps"]
-    CHECKPOINT_EVERY_STEPS = cfg["training"]["checkpoint_every_steps"]
+    CHECKPOINT_EVERY_EPOCHS = cfg["training"]["checkpoint_every_epochs"]
 
     ################# LOGGING (rank 0 only) #################
     if rank == 0:
@@ -124,13 +124,21 @@ def main():
     )
 
     model = model.to(DEVICE)
-    model = DDP(
-        model,
-        device_ids=[local_rank],
-        output_device=local_rank,
-        find_unused_parameters=True,
-        broadcast_buffers=True,
-    )
+    
+    if MODEL_TYPE == "mae":
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            find_unused_parameters=True,
+            broadcast_buffers=True,
+        )
+    elif MODEL_TYPE == "dino":
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+        )
 
     ################# 5. TRAIN #################
     tic = time.time()
@@ -172,27 +180,46 @@ def main():
                 writer.add_scalar("train/global_loss", loss_val, global_step)
                 csv_writer.writerow([global_step, epoch + 1, loss_val])
                 csv_file.flush()
+                
+        ################# CHECKPOINT (PER EPOCH) #################
+        if rank == 0 and (epoch + 1) % CHECKPOINT_EVERY_EPOCHS == 0:
 
-            ################# CHECKPOINT #################
-            if rank == 0 and global_step % CHECKPOINT_EVERY_STEPS == 0:
+            ckpt_path = os.path.join(
+                cfg["logging"]["checkpoint_root"], MODEL_TYPE
+            )
+            os.makedirs(ckpt_path, exist_ok=True)
 
-                ckpt_path = os.path.join(
-                    cfg["logging"]["checkpoint_root"], MODEL_TYPE
+            if MODEL_TYPE == "mae":
+                torch.save(
+                    model.module.encoder.state_dict(),
+                    os.path.join(ckpt_path, f"encoder_epoch_{epoch+1}.pth")
                 )
-                os.makedirs(ckpt_path, exist_ok=True)
+            elif MODEL_TYPE == "dino":
+                torch.save(
+                    model.module.net.state_dict(),
+                    os.path.join(ckpt_path, f"encoder_epoch_{epoch+1}.pth")
+                )
 
-                if MODEL_TYPE == "mae":
-                    torch.save(
-                        model.module.encoder.state_dict(),
-                        os.path.join(ckpt_path, f"encoder_step_{global_step}.pth")
-                    )
-                elif MODEL_TYPE == "dino":
-                    torch.save(
-                        model.module.net.state_dict(),
-                        os.path.join(ckpt_path, f"encoder_step_{global_step}.pth")
-                    )
+            print(f"Saved checkpoint at epoch {epoch+1}")
 
-                print(f"Saved checkpoint at step {global_step}")
+    ################# FINAL FULL CHECKPOINT #################    
+    if rank == 0:
+        if MODEL_TYPE == "mae":
+            torch.save({
+                "epoch": NUM_EPOCHS,
+                "global_step": global_step,
+                "model": model.module.encoder.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }, os.path.join(ckpt_path, "final_full_checkpoint.pth"))
+        elif MODEL_TYPE == "dino":
+            torch.save({
+                "epoch": NUM_EPOCHS,
+                "global_step": global_step,
+                "model": model.module.net.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }, os.path.join(ckpt_path, "final_full_checkpoint.pth"))
+            
+        print("Saved final full resume checkpoint")
 
     ################# CLEANUP #################
     if rank == 0:

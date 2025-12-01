@@ -2,18 +2,18 @@
 # MODEL
 # ============================
 model:
-  type: mae      # Options: 'mae', 'dino', 'simmim'
+  type: mae      # Options: 'mae', 'dino'
 
 # ============================
 # TRAINING
 # ============================
 training:
   batch_size_per_gpu: 64
-  num_epochs: 50
-  total_samples_per_epoch: 200000
+  num_epochs: 100
+  total_samples_per_epoch: 2000000
 
-  print_every_steps: 100
-  checkpoint_every_steps: 1000
+  print_every_steps: 500
+  checkpoint_every_epochs: 10
 
   seed: 42
 
@@ -22,7 +22,7 @@ training:
 # ============================
 data:
   data_root: "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/images/"
-  shards: "gravestones_shard_{000000..000099}.tar"
+  shards: "gravestones_shard_{000000..000999}.tar"
   num_workers: 4
   shuffle_buffer: 1000
 

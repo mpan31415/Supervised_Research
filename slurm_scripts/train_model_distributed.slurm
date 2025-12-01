@@ -10,8 +10,8 @@
 #SBATCH --mem-per-cpu=6G
 
 # SBATCH --gpus=nvidia_a100_80gb_pcie:1
-# SBATCH --gpus=nvidia_geforce_rtx_4090:1
-#SBATCH --gpus=nvidia_geforce_rtx_3090:4
+#SBATCH --gpus=nvidia_geforce_rtx_4090:4
+# SBATCH --gpus=nvidia_geforce_rtx_3090:4
 
 #SBATCH --mail-user=jiapan@student.ethz.ch
 #SBATCH --mail-type=END,FAIL
