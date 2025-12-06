@@ -21,7 +21,7 @@ training:
 # DATA
 # ============================
 data:
-  data_root: "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/images/"
+  data_root: "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards/"
   shards: "gravestones_shard_{000000..000999}.tar"
   num_workers: 4
   shuffle_buffer: 1000

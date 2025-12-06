@@ -18,7 +18,7 @@ from PIL import Image
 # ---------------- CONFIG ----------------
 CONFIG = {
     "root_dir": "/cluster/work/lawecon_repo/gravestones/shards/images",
-    "output_dir": "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/images",
+    "output_dir": "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards",
     "output_prefix": "gravestones_shard",
     
     "target_count": 2_000_000,

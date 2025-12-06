@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
 
     ################# 1. DATA LOADING #################
-    ALL_DATA_DIR = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/images/"
+    ALL_DATA_DIR = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards/"
     dataset_shards = "gravestones_shard_{000000..000099}.tar"
     # create webdataset object
     dataset = wds.WebDataset(ALL_DATA_DIR + dataset_shards, resampled=True, shardshuffle=True).shuffle(1000).decode("pil", handler=decoder_skip)
