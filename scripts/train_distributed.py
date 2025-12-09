@@ -118,7 +118,7 @@ def main():
     )
 
     ################# 4. MODEL + OPTIMIZER #################
-    encoder, model, optimizer = create_model(
+    model, optimizer = create_model(
         type=MODEL_TYPE,
         device=DEVICE,
     )
@@ -188,38 +188,22 @@ def main():
                 cfg["logging"]["checkpoint_root"], MODEL_TYPE
             )
             os.makedirs(ckpt_path, exist_ok=True)
-
-            if MODEL_TYPE == "mae":
-                torch.save(
-                    model.module.encoder.state_dict(),
-                    os.path.join(ckpt_path, f"encoder_epoch_{epoch+1}.pth")
-                )
-            elif MODEL_TYPE == "dino":
-                torch.save(
-                    model.module.net.state_dict(),
-                    os.path.join(ckpt_path, f"encoder_epoch_{epoch+1}.pth")
-                )
-
+            torch.save(
+                model.module.state_dict(),
+                os.path.join(ckpt_path, f"epoch_{epoch+1}.pth")
+            )
             print(f"Saved checkpoint at epoch {epoch+1}")
 
     ################# FINAL FULL CHECKPOINT #################    
     if rank == 0:
-        if MODEL_TYPE == "mae":
-            torch.save({
-                "epoch": NUM_EPOCHS,
-                "global_step": global_step,
-                "model": model.module.encoder.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }, os.path.join(ckpt_path, "final_full_checkpoint.pth"))
-        elif MODEL_TYPE == "dino":
-            torch.save({
-                "epoch": NUM_EPOCHS,
-                "global_step": global_step,
-                "model": model.module.net.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }, os.path.join(ckpt_path, "final_full_checkpoint.pth"))
-            
-        print("Saved final full resume checkpoint")
+        torch.save({
+            "epoch": NUM_EPOCHS,
+            "global_step": global_step,
+            "model": model.module.state_dict(),
+            "optimizer": optimizer.state_dict(),
+        }, os.path.join(ckpt_path, "final_checkpoint.pth")
+        )
+        print("Saved final checkpoint")
 
     ################# CLEANUP #################
     if rank == 0:

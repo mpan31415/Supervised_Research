@@ -11,27 +11,14 @@ import numpy as np
 def create_model(type: str, device: str) -> nn.Module:
     
     print("=" * 50)
-    print("=" * 50)
-    print("=" * 50)
     print(f"\n          Creating {type.upper()} model ...\n")
     print("=" * 50)
-    print("=" * 50)
-    print("=" * 50)
+    
+    # create encoder
+    encoder = create_encoder()
     
     ######################## MAE ########################
-    if type == "mae":
-        encoder = ViT(
-            image_size = 256,
-            patch_size = 16,
-            num_classes = 1000,
-            dim = 768,
-            depth = 12,
-            heads = 12,
-            mlp_dim = 1536
-        )
-        # REMOVE classifier head for DINO
-        encoder.mlp_head = torch.nn.Identity()
-        
+    if type == "mae":        
         model = MAE(
             encoder = encoder,
             masking_ratio = 0.75,   # the paper recommended 75% masked patches
@@ -47,21 +34,9 @@ def create_model(type: str, device: str) -> nn.Module:
         )
         
     ######################## DINO ########################
-    elif type == "dino":
-        encoder = ViT(
-            image_size = 256,
-            patch_size = 16,
-            num_classes = 1000,
-            dim = 768,
-            depth = 12,
-            heads = 12,
-            mlp_dim = 1536
-        )
-        # REMOVE classifier head for DINO
-        encoder.mlp_head = torch.nn.Identity()
-        
+    elif type == "dino":        
         model = Dino(
-            encoder,
+            net = encoder,
             image_size = 256,
             hidden_layer = 'to_latent',          # hidden layer name or index, from which to extract the embedding
             projection_hidden_size = 512,        # projector network hidden dimension
@@ -87,26 +62,33 @@ def create_model(type: str, device: str) -> nn.Module:
     
     ######################## simMIM ########################
     elif type == "simmim":
-        encoder = ViT(
-            image_size = 256,
-            patch_size = 16,
-            num_classes = 1000,
-            dim = 768,
-            depth = 12,
-            heads = 12,
-            mlp_dim = 1536
-        )
         model = SimMIM(
             encoder = encoder,
             masking_ratio = 0.5  # they found 50% to yield the best results
         ).to(device)
+        
         optimizer = optim.Adam(model.parameters(), lr=5e-3)
     
     ######################## ERROR ########################
     else:
         raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino', 'mpp', 'simmim'.")
     
-    return encoder, model, optimizer
+    return model, optimizer
+
+
+def create_encoder():
+    encoder = ViT(
+        image_size = 256,
+        patch_size = 16,
+        num_classes = 1000,
+        dim = 768,
+        depth = 12,
+        heads = 12,
+        mlp_dim = 1536
+    )
+    # remove classifier head
+    encoder.mlp_head = torch.nn.Identity()
+    return encoder
 
 
 def decoder_skip(exc, sample=None, key=None, url=None):
