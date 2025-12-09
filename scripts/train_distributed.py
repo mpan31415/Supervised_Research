@@ -143,6 +143,8 @@ def main():
     ################# 5. TRAIN #################
     tic = time.time()
     global_step = 0
+    
+    print("Starting Training...")
 
     for epoch in range(NUM_EPOCHS):
         for i, data in enumerate(train_loader):

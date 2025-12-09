@@ -6,9 +6,10 @@ import torch
 import os
 import random
 import numpy as np
+from typing import Tuple
 
 
-def create_model(type: str, device: str) -> nn.Module:
+def create_model(type: str, device: str) -> Tuple[nn.Module, optim.Optimizer]:
     
     print("=" * 50)
     print(f"\n          Creating {type.upper()} model ...\n")
@@ -28,11 +29,10 @@ def create_model(type: str, device: str) -> nn.Module:
         
         optimizer = torch.optim.AdamW(
             model.parameters(),
-            lr=1.5e-4,
-            betas=(0.9, 0.95),
+            lr=3e-4,
             weight_decay=0.05
         )
-        
+
     ######################## DINO ########################
     elif type == "dino":        
         model = Dino(
@@ -52,7 +52,7 @@ def create_model(type: str, device: str) -> nn.Module:
         
         optimizer = torch.optim.AdamW(
             model.parameters(),
-            lr = 1e-4,
+            lr = 3e-4,
             weight_decay = 0.04
         )
     
@@ -76,11 +76,11 @@ def create_model(type: str, device: str) -> nn.Module:
     return model, optimizer
 
 
-def create_encoder():
+def create_encoder() -> ViT:
     encoder = ViT(
         image_size = 256,
         patch_size = 16,
-        num_classes = 1000,
+        num_classes = 1000,   # this gets overwritten below so doesn't matter
         dim = 768,
         depth = 12,
         heads = 12,
@@ -96,7 +96,7 @@ def decoder_skip(exc, sample=None, key=None, url=None):
     return True
 
 
-def seed_everything(seed):
+def seed_everything(seed) -> None:
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
