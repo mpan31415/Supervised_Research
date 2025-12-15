@@ -190,21 +190,36 @@ def main():
                 cfg["logging"]["checkpoint_root"], MODEL_TYPE
             )
             os.makedirs(ckpt_path, exist_ok=True)
-            torch.save(
-                model.module.state_dict(),
-                os.path.join(ckpt_path, f"epoch_{epoch+1}.pth")
-            )
+            if MODEL_TYPE == "mae":
+                torch.save(
+                    model.module.state_dict(),
+                    os.path.join(ckpt_path, f"epoch_{epoch+1}.pth")
+                )
+            elif MODEL_TYPE == "dino":
+                torch.save(
+                    model.module.net.state_dict(),
+                    os.path.join(ckpt_path, f"enc_epoch_{epoch+1}.pth")
+                )
             print(f"Saved checkpoint at epoch {epoch+1}")
 
     ################# FINAL FULL CHECKPOINT #################    
     if rank == 0:
-        torch.save({
-            "epoch": NUM_EPOCHS,
-            "global_step": global_step,
-            "model": model.module.state_dict(),
-            "optimizer": optimizer.state_dict(),
-        }, os.path.join(ckpt_path, "final_checkpoint.pth")
-        )
+        if MODEL_TYPE == "mae":
+            torch.save({
+                "epoch": NUM_EPOCHS,
+                "global_step": global_step,
+                "model": model.module.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }, os.path.join(ckpt_path, "final_checkpoint.pth")
+            )
+        elif MODEL_TYPE == "dino":
+            torch.save({
+                "epoch": NUM_EPOCHS,
+                "global_step": global_step,
+                "model": model.module.net.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }, os.path.join(ckpt_path, "enc_final_checkpoint.pth")
+            )
         print("Saved final checkpoint")
 
     ################# CLEANUP #################
