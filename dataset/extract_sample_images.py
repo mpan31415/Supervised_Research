@@ -7,7 +7,7 @@ TAR_PATH = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards/g
 IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 
 SAMPLE_IMAGES_DIR = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/sample_images"
-NUM_IMAGES_TO_SAVE = 100
+NUM_IMAGES_TO_SAVE = 1000
 # ----------------
 
 def list_images_in_tar(tar_path):

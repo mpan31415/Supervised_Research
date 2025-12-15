@@ -1,4 +1,4 @@
-from vit_pytorch import ViT, MAE, Dino
+from vit_pytorch import ViT, Dino
 from vit_pytorch.mpp import MPP
 from vit_pytorch.simmim import SimMIM
 from torch import nn, optim
@@ -7,6 +7,9 @@ import os
 import random
 import numpy as np
 from typing import Tuple
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+from models import MAE
 
 
 def create_model(type: str, device: str) -> Tuple[nn.Module, optim.Optimizer]:
@@ -104,3 +107,42 @@ def seed_everything(seed) -> None:
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+    
+    
+def find_corner_indices(Z):
+    """
+    Z: (N, 2) embedding
+    Returns indices of points closest to the 4 corners
+    """
+    corners = np.array([
+        [Z[:, 0].min(), Z[:, 1].min()],  # bottom-left
+        [Z[:, 0].min(), Z[:, 1].max()],  # top-left
+        [Z[:, 0].max(), Z[:, 1].min()],  # bottom-right
+        [Z[:, 0].max(), Z[:, 1].max()],  # top-right
+    ])
+
+    indices = []
+    for c in corners:
+        dists = np.linalg.norm(Z - c, axis=1)
+        indices.append(np.argmin(dists))
+
+    return list(set(indices))  # remove duplicates if any
+
+
+def overlay_images(ax, Z, indices, image_tensors, zoom=0.2):
+    """
+    ax: matplotlib axis
+    Z: (N, 2) embedding
+    indices: list of indices to overlay
+    image_tensors: list of original image tensors (C,H,W)
+    """
+    for idx in indices:
+        img = image_tensors[idx].permute(1, 2, 0).cpu().numpy()
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(
+            imagebox,
+            (Z[idx, 0], Z[idx, 1]),
+            frameon=True,
+            pad=0.3
+        )
+        ax.add_artist(ab)
