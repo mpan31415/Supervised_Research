@@ -29,7 +29,7 @@ print("device:", DEVICE)
 # model checkpoint
 ckpt_dir = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 model_type = "mae"
-ckpt_name = "epoch_30.pth"
+ckpt_name = "epoch_100.pth"
 
 # plot save dir
 plot_save_dir = str(project_root) + "/scripts/eval_plots/"

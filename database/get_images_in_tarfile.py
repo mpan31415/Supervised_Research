@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 
 # ---- CONFIG ----
-TAR_PATH = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards/gravestones_shard_000000.tar"
+# TAR_PATH = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/shards/gravestones_shard_000000.tar"
+TAR_PATH = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled_shards/labeled_shard_000010.tar"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 # ----------------
 

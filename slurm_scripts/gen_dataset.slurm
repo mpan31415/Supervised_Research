@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=gen_gravestones
+#SBATCH --job-name=gen_dataset
 #SBATCH --output=out_%A_%a.out
 #SBATCH --error=err_%A_%a.err
-#SBATCH --time=300:00:00
+#SBATCH --time=1:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -20,4 +20,5 @@ conda activate gravestones
 export PYTHONUNBUFFERED=1
 
 # run script
-python /cluster/home/jiapan/Supervised_Research/scripts/gen_new_dataset.py
+#python /cluster/home/jiapan/Supervised_Research/scripts/gen_new_dataset.py
+python /cluster/home/jiapan/Supervised_Research/scripts/gen_labeled_dataset.py
