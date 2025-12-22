@@ -198,7 +198,7 @@ def main():
             elif MODEL_TYPE == "dino":
                 torch.save(
                     model.module.net.state_dict(),
-                    os.path.join(ckpt_path, f"enc_epoch_{epoch+1}.pth")
+                    os.path.join(ckpt_path, f"epoch_{epoch+1}.pth")
                 )
             print(f"Saved checkpoint at epoch {epoch+1}")
 

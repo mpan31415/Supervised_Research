@@ -212,4 +212,4 @@ checkpoints/
 *.err
 *.out
 logs/
-eval_plots/
+plots/

@@ -59,22 +59,9 @@ def create_model(type: str, device: str) -> Tuple[nn.Module, optim.Optimizer]:
             weight_decay = 0.04
         )
     
-    ######################## MPP ########################
-    elif type == "mpp":
-        pass
-    
-    ######################## simMIM ########################
-    elif type == "simmim":
-        model = SimMIM(
-            encoder = encoder,
-            masking_ratio = 0.5  # they found 50% to yield the best results
-        ).to(device)
-        
-        optimizer = optim.Adam(model.parameters(), lr=5e-3)
-    
     ######################## ERROR ########################
     else:
-        raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino', 'mpp', 'simmim'.")
+        raise ValueError(f"Model type {type} not recognized. Choose from 'mae', 'dino'.")
     
     return model, optimizer
 

@@ -2,7 +2,7 @@
 # MODEL
 # ============================
 model:
-  type: mae      # Options: 'mae', 'dino'
+  type: dino      # Options: 'mae', 'dino'
 
 # ============================
 # TRAINING

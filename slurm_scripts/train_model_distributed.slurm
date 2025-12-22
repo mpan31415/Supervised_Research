@@ -2,7 +2,7 @@
 #SBATCH --job-name=train_model
 #SBATCH --output=train_%A_%a.out
 #SBATCH --error=train_%A_%a.err
-#SBATCH --time=72:00:00
+#SBATCH --time=120:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=8

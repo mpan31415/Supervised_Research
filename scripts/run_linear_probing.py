@@ -17,9 +17,9 @@ SHARDS = "labeled_shard_{000000..000009}.tar"
 
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 MODEL_TYPE = "mae"
-CKPT_NAME = "epoch_100.pth"
+CKPT_NAME = "epoch_20.pth"
 
-TARGET_LABEL = "deathyear"    # OPTIONS: "is_military", "has_cross", or "deathyear"
+TARGET_LABEL = "is_military"    # OPTIONS: "is_military", "has_cross", or "deathyear"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
