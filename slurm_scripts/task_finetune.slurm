@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=linear_probing
-#SBATCH --output=probe_%A_%a.out
-#SBATCH --error=probe_%A_%a.err
+#SBATCH --job-name=task_finetune
+#SBATCH --output=finetune_%A_%a.out
+#SBATCH --error=finetune_%A_%a.err
 #SBATCH --time=4:00:00
 
 #SBATCH --nodes=1

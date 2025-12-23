@@ -8,6 +8,9 @@ import webdataset as wds
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import numpy as np
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from utils import create_model, seed_everything
 
@@ -17,16 +20,20 @@ SHARDS = "labeled_shard_{000000..000009}.tar"
 
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 MODEL_TYPE = "mae"
-CKPT_NAME = "epoch_20.pth"
+CKPT_NAME = "epoch_100.pth"
 
-TARGET_LABEL = "is_military"    # OPTIONS: "is_military", "has_cross", or "deathyear"
+TARGET_LABEL = "has_cross"    # OPTIONS: "is_military", "has_cross", or "deathyear"
+
+CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_linear_{TARGET_LABEL}.png"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 BATCH_SIZE = 128
-NUM_EPOCHS = 20
+NUM_EPOCHS = 100
 LR = 1e-3
 SEED = 42
+
+POS_CLASS_WEIGHT = 2.0
 
 TRAIN_SPLIT = 0.8  # 80% train, 20% val
 # ----------------------------------------
@@ -149,7 +156,8 @@ classifier = nn.Linear(emb_dim, 1).to(DEVICE)
 
 # choose loss based on task type
 if TARGET_LABEL in ["is_military", "has_cross"]:
-    criterion = nn.BCEWithLogitsLoss()
+    pos_weight = torch.tensor([POS_CLASS_WEIGHT]).to(DEVICE)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 else:
     criterion = nn.MSELoss()
 
@@ -224,3 +232,59 @@ for epoch in range(NUM_EPOCHS):
         )
 
 print("\n✅ Linear probing finished.")
+
+
+# -------- CONFUSION MATRIX --------
+classifier.eval()
+y_true = []
+y_pred = []
+
+with torch.no_grad():
+    for x, y in val_loader:
+        x = x.to(DEVICE)
+        y = y.to(DEVICE)
+
+        z = model.encoder(x)
+        logits = classifier(z).squeeze(1)
+        preds = (torch.sigmoid(logits) > 0.5).float()
+
+        y_true.append(y.cpu())
+        y_pred.append(preds.cpu())
+
+y_true = torch.cat(y_true).numpy()
+y_pred = torch.cat(y_pred).numpy()
+
+# original cm: rows=true [neg, pos], cols=pred [neg, pos]
+cm = confusion_matrix(y_true, y_pred)
+# reorder to [Positive, Negative]
+cm = cm[[1, 0], :][:, [1, 0]]
+
+# -------- PLOT --------
+plt.figure(figsize=(4, 4))
+cm_percent = cm.astype(np.float32) / cm.sum() * 100
+
+sns.heatmap(
+    cm_percent,
+    annot=True,
+    fmt=".1f",
+    cmap="Blues",
+    xticklabels=["Positive", "Negative"],
+    yticklabels=["Positive", "Negative"],
+    cbar=False
+)
+
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+# plt.title(f"Confusion Matrix ({TARGET_LABEL}) [%]")
+
+# Move x-axis labels to top
+plt.gca().xaxis.set_label_position('top')
+plt.gca().xaxis.tick_top()
+
+save_path = "/cluster/home/jiapan/Supervised_Research/plots/" + MODEL_TYPE + "/" + CONF_MAT_SAVE_NAME
+
+plt.tight_layout()
+plt.savefig(save_path, dpi=300)
+plt.close()
+
+print(f"Confusion matrix saved to {save_path}")

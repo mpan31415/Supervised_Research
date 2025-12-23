@@ -141,7 +141,7 @@ for img_idx in range(NUM_IMAGES):
         #     axes[img_idx, head_idx + 1].set_title(f"Head {head_idx + 1}")
 
 plt.tight_layout()
-plt.savefig(plot_save_dir + "/" + model_type + "_cls_attn_viz.png", dpi=300)
+plt.savefig(plot_save_dir + "/" + model_type + "_cls_attn.png", dpi=300)
 plt.close()
 
-print(f"✅ Saved CLS token attention visualization to: {plot_save_dir + '/' + model_type + '_cls_attn_viz.png'}")
+print(f"✅ Saved CLS token attention visualization to: {plot_save_dir + '/' + model_type + '_cls_attn.png'}")
