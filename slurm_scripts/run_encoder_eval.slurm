@@ -24,4 +24,5 @@ conda activate gravestones
 export PYTHONUNBUFFERED=1
 
 # run scripts
-python /cluster/home/jiapan/Supervised_Research/scripts/run_probing.py
+#python /cluster/home/jiapan/Supervised_Research/scripts/run_probing.py
+python /cluster/home/jiapan/Supervised_Research/scripts/run_partial_finetune.py
