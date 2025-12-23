@@ -24,7 +24,9 @@ CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "has_cross"    # OPTIONS: "is_military", "has_cross", or "deathyear"
 
-CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_linear_{TARGET_LABEL}.png"
+PROBE_TYPE = "nonlinear"     # OPTIONS: "linear", "nonlinear"
+
+CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_{PROBE_TYPE}_{TARGET_LABEL}.png"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -151,8 +153,19 @@ with torch.no_grad():
 
 print("Encoder embedding dimension:", emb_dim)
 
-# linear probe
-classifier = nn.Linear(emb_dim, 1).to(DEVICE)
+# create classifier
+if PROBE_TYPE == "linear":
+    # linear probe
+    classifier = nn.Linear(emb_dim, 1).to(DEVICE)
+elif PROBE_TYPE == "nonlinear":
+    # nonlinear probe
+    classifier = nn.Sequential(
+        nn.Linear(emb_dim, 256),
+        nn.ReLU(),
+        nn.Linear(256, 1)
+    ).to(DEVICE)
+else:
+    raise ValueError(f"Invalid PROBE_TYPE: {PROBE_TYPE}")
 
 # choose loss based on task type
 if TARGET_LABEL in ["is_military", "has_cross"]:
@@ -195,7 +208,7 @@ def evaluate(loader):
     else:
         return total_loss / len(loader), None
 
-print("\nStarting linear probing...\n")
+print(f"\nStarting {PROBE_TYPE} probing...\n")
 
 for epoch in range(NUM_EPOCHS):
     classifier.train()
