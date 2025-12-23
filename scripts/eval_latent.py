@@ -4,10 +4,11 @@ from pathlib import Path
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import scienceplots
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-from utils import create_model, find_corner_indices, overlay_images
+from utils import create_model, find_corner_indices, overlay_corner_grids
 
 current_dir = Path.cwd()
 project_root = current_dir.parent
@@ -15,6 +16,13 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
     print(f"Added project root to sys.path: {project_root}")
 from dataset.utils import load_images_as_tensors
+
+# set plotting style
+plt.style.use(['science', 'ieee'])
+# Disable the requirement for a system LaTeX installation
+plt.rcParams.update({
+    "text.usetex": False,
+})
 
 
 ################## 0. CONFIG ##################
@@ -32,7 +40,7 @@ model_type = "mae"
 ckpt_name = "epoch_100.pth"
 
 # plot save dir
-plot_save_dir = str(project_root) + "/scripts/eval_plots/"
+plot_save_dir = str(project_root) + "/plots/" + model_type + "/"
 
 
 ################## 1. LOAD DATA ##################
@@ -65,7 +73,7 @@ ckpt_path = os.path.join(ckpt_dir, model_type, ckpt_name)
 state_dict = torch.load(ckpt_path, map_location=DEVICE)
 model.load_state_dict(state_dict)
 model.eval()
-print(f"✅ Successfully loaded MAE model weights from: {ckpt_path}")
+print(f"✅ Successfully loaded model weights from: {ckpt_path}")
 
 
 ################## 3. FORWARD PASS ON FEW SAMPLE IMAGES ##################
@@ -93,7 +101,7 @@ FEATURE_MAP_SHAPE = (32, 24)    # 32 * 24 = 768
 
 # --- PLOTTING ---
 fig, axes = plt.subplots(nrows=2, ncols=NUM_SAMPLES, figsize=(3 * NUM_SAMPLES, 6))
-plt.suptitle(f"Input Images and Latent Embeddings (Reshaped)", fontsize=16)
+# plt.suptitle(f"Input Images and Latent Embeddings (Reshaped)", fontsize=16)
 
 for i in range(NUM_SAMPLES):
     # --- Row 1: Original Input Image (3x256x256) ---
@@ -104,7 +112,7 @@ for i in range(NUM_SAMPLES):
     
     # Ensure image is in the correct range for plotting (0-1 floats or 0-255 ints)
     ax_img.imshow(img_display)
-    ax_img.set_title(f"Image {i+1}", fontsize=12)
+    # ax_img.set_title(f"Image {i+1}", fontsize=12)
     ax_img.axis('off')
 
     # --- Row 2: Latent Embedding (768-dim) ---
@@ -117,7 +125,7 @@ for i in range(NUM_SAMPLES):
     # 'interpolation' is set to 'nearest' for a sharp, pixelated look.
     im = ax_latent.imshow(latent_map, cmap='viridis', aspect='auto', interpolation='nearest')
     
-    ax_latent.set_title(f"Latent Map {i+1}", fontsize=12)
+    # ax_latent.set_title(f"Latent Map {i+1}", fontsize=12)
     ax_latent.set_xticks([])
     ax_latent.set_yticks([])
 
@@ -125,8 +133,8 @@ for i in range(NUM_SAMPLES):
 cbar_ax = fig.add_axes([0.92, 0.1, 0.01, 0.35])      # [left, bottom, width, height]
 fig.colorbar(im, cax=cbar_ax, label='Latent Vector Value')
 # save plot
-plt.tight_layout()
-plt.savefig(plot_save_dir + "mae_latents_viz.png", dpi=300)
+# plt.tight_layout()
+plt.savefig(plot_save_dir + "/" + model_type + "_cls_vec.png", dpi=600)
 plt.close()
 print("✅ Latent visualization plot saved.")
 
@@ -143,18 +151,16 @@ latent_embeddings = latent_embeddings.cpu().numpy()   # convert to numpy for PCA
 
 # PCA-2
 Z_pca = PCA(n_components=2).fit_transform(latent_embeddings)
-corner_indices_pca = find_corner_indices(Z_pca)
-print("PCA corner indices:", corner_indices_pca)
 
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(8, 8))
 ax = plt.gca()
-ax.scatter(Z_pca[:, 0], Z_pca[:, 1], s=10, alpha=0.6)
-overlay_images(ax, Z_pca, corner_indices_pca, image_tensors_list)
-ax.set_title("PCA of Latent Embeddings (with extreme images)", fontsize=16)
+ax.scatter(Z_pca[:, 0], Z_pca[:, 1], s=15, alpha=0.4, c='gray', edgecolors='none')
+overlay_corner_grids(ax, Z_pca, image_tensors_list, zoom=0.2)
+# ax.set_title("PCA of Latent Embeddings (with extreme images)", fontsize=16)
 ax.set_xlabel("Principal Component 1", fontsize=12)
 ax.set_ylabel("Principal Component 2", fontsize=12)
 ax.grid(True)
-plt.savefig(plot_save_dir + "mae_latents_pca.png", dpi=300)
+plt.savefig(plot_save_dir + "/" + model_type + "_pca.png", dpi=600)
 plt.close()
 print("PCA plot saved.")
 
@@ -168,18 +174,15 @@ Z_tsne = TSNE(
     random_state=42
 ).fit_transform(Z_50)
 
-corner_indices_tsne = find_corner_indices(Z_tsne)
-print("t-SNE corner indices:", corner_indices_tsne)
-
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(8, 8))
 ax = plt.gca()
-ax.scatter(Z_tsne[:, 0], Z_tsne[:, 1], s=10, alpha=0.6)
-overlay_images(ax, Z_tsne, corner_indices_tsne, image_tensors_list)
-ax.set_title("t-SNE of Latent Embeddings (with extreme images)", fontsize=16)
+ax.scatter(Z_tsne[:, 0], Z_tsne[:, 1], s=15, alpha=0.4, c='gray', edgecolors='none')
+overlay_corner_grids(ax, Z_tsne, image_tensors_list, zoom=0.2)
+# ax.set_title("t-SNE of Latent Embeddings (with extreme images)", fontsize=16)
 ax.set_xlabel("t-SNE Dimension 1", fontsize=12)
 ax.set_ylabel("t-SNE Dimension 2", fontsize=12)
 ax.grid(True)
-plt.savefig(plot_save_dir + "mae_latents_tsne.png", dpi=300)
+plt.savefig(plot_save_dir + "/" + model_type + "_tsne.png", dpi=600)
 plt.close()
 print("t-SNE plot saved.")
 
@@ -192,11 +195,11 @@ expl_var_ratios = [0] + list(np.cumsum(pca.explained_variance_ratio_[:30]))
 plt.figure(figsize=(8, 6))
 ax = plt.gca()
 ax.plot(indices, expl_var_ratios, marker='o')
-ax.set_xlabel('Number of Components')
-ax.set_ylabel('Cumulative Explained Variance')
-ax.set_title('PCA Explained Variance')
+ax.set_xlabel('Number of Components', fontsize=12)
+ax.set_ylabel('Cumulative Explained Variance', fontsize=12)
+# ax.set_title('PCA Explained Variance', fontsize=16)
 ax.grid(True)
-plt.savefig(plot_save_dir + "mae_latents_expl_var.png", dpi=300)
+plt.savefig(plot_save_dir + "/" + model_type + "_expl_var.png", dpi=600)
 plt.close()
 print("Explained variance plot saved.")
 

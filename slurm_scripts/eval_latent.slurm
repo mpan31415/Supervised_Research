@@ -25,4 +25,4 @@ export PYTHONUNBUFFERED=1
 
 # run scripts
 python /cluster/home/jiapan/Supervised_Research/scripts/eval_latent.py
-python /cluster/home/jiapan/Supervised_Research/scripts/dino_style_viz.py
+python /cluster/home/jiapan/Supervised_Research/scripts/cls_attn_viz.py
