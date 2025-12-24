@@ -22,7 +22,7 @@ TARGET_LABEL = "deathyear"
 PROBE_TYPE = "linear"       # OPTIONS: "linear", "nonlinear"
 
 BATCH_SIZE = 64            # Larger batch size possible for probing
-NUM_EPOCHS = 2
+NUM_EPOCHS = 100
 SEED = 42
 TRAIN_SPLIT = 0.8
 LR = 1e-3

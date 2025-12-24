@@ -27,5 +27,5 @@ export PYTHONUNBUFFERED=1
 #python /cluster/home/jiapan/Supervised_Research/scripts/run_probing.py
 #python /cluster/home/jiapan/Supervised_Research/scripts/run_partial_finetune.py
 
-python /cluster/home/jiapan/Supervised_Research/scripts/run_probing_ranking.py
-#python /cluster/home/jiapan/Supervised_Research/scripts/run_partial_finetune_ranking.py
+#python /cluster/home/jiapan/Supervised_Research/scripts/run_probing_ranking.py
+python /cluster/home/jiapan/Supervised_Research/scripts/run_partial_finetune_ranking.py

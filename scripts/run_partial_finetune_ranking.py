@@ -19,7 +19,7 @@ MODEL_TYPE = "mae"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
-NUM_TUNE_LAYERS = 1
+NUM_TUNE_LAYERS = 8          # K: number of transformer layers to unfreeze
 
 BATCH_SIZE = 64
 NUM_EPOCHS = 100
@@ -121,11 +121,13 @@ with torch.no_grad():
 
 print("Encoder embedding dimension:", emb_dim)
 
-classifier = nn.Sequential(
-    nn.Linear(emb_dim * 2, 256),
-    nn.ReLU(),
-    nn.Linear(256, 1)
-).to(DEVICE)
+# NOTE: use linear classifer head
+classifier = nn.Linear(emb_dim * 2, 1).to(DEVICE)
+# classifier = nn.Sequential(
+#     nn.Linear(emb_dim * 2, 256),
+#     nn.ReLU(),
+#     nn.Linear(256, 1)
+# ).to(DEVICE)
 
 optimizer = optim.AdamW([
     {"params": classifier.parameters(), "lr": LR_HEAD},
@@ -192,5 +194,6 @@ accs = [v[0]/v[1] if v[1]>0 else 0 for v in val_bins.values()]
 plt.bar(labels, accs)
 plt.xlabel("Year Gap Bins")
 plt.ylabel("Validation Accuracy")
+plt.ylim(0,1)
 # plt.title("Performance Ceiling by Year Gap")
 plt.savefig(f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}/{MODEL_TYPE}_partial{str(NUM_TUNE_LAYERS)}_{TARGET_LABEL}.png")
