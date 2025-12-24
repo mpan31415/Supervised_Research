@@ -6,119 +6,94 @@ import torch.optim as optim
 from torchvision import transforms
 import webdataset as wds
 from torch.utils.data import DataLoader, Dataset
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from utils import create_model, seed_everything
 
 # ---------------- CONFIG ----------------
 DATA_ROOT = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled_shards"
 SHARDS = "labeled_shard_{000000..000009}.tar"
-
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
+
 MODEL_TYPE = "mae"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
-PROBE_TYPE = "linear"       # OPTIONS: "linear" or "nonlinear"
+PROBE_TYPE = "linear"       # OPTIONS: "linear", "nonlinear"
 
-CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_{PROBE_TYPE}_deathyear.png"
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-BATCH_SIZE = 64
-NUM_EPOCHS = 100
-LR = 1e-3
+BATCH_SIZE = 64            # Larger batch size possible for probing
+NUM_EPOCHS = 2
 SEED = 42
 TRAIN_SPLIT = 0.8
+LR = 1e-3
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ----------------------------------------
 
 seed_everything(SEED)
 
-# ---------------- DATA LOADING ----------------
+# ---------------- DATA PREP ----------------
+# Standard Probing usually uses minimal augmentation to evaluate the raw features
 transform = transforms.Compose([transforms.ToTensor()])
 
 def make_sample(sample):
-    if "jpg" not in sample or "json" not in sample:
-        return None
-    
+    if "jpg" not in sample or "json" not in sample: return None
     labels = sample["json"]
-    if labels.get(TARGET_LABEL) is None:
-        return None
+    if labels.get(TARGET_LABEL) is None: return None
+    return sample["jpg"], float(labels[TARGET_LABEL])
 
-    image = transform(sample["jpg"])
-    target = float(labels[TARGET_LABEL])
-    return image, target
-
-# Load raw samples into memory
-dataset = (
-    wds.WebDataset(os.path.join(DATA_ROOT, SHARDS))
-    .decode("pil")
-    .map(make_sample)
-)
+dataset = wds.WebDataset(os.path.join(DATA_ROOT, SHARDS)).decode("pil").map(make_sample)
 all_samples = [s for s in dataset if s is not None]
 
-# Random Split
-indices = list(range(len(all_samples)))
-random.shuffle(indices)
+random.shuffle(all_samples)
 split_idx = int(len(all_samples) * TRAIN_SPLIT)
-train_indices = indices[:split_idx]
-val_indices = indices[split_idx:]
+train_base = all_samples[:split_idx]
+val_base = all_samples[split_idx:]
 
-train_base_samples = [all_samples[i] for i in train_indices]
-val_base_samples = [all_samples[i] for i in val_indices]
-
-# ---------------- PAIRWISE DATASET ----------------
-class PairwiseDataset(Dataset):
-    """
-    Returns pairs of images and a binary label:
-    1.0 if Year(A) > Year(B)
-    0.0 if Year(A) <= Year(B)
-    """
-    def __init__(self, samples):
+class BalancedPairwiseDataset(Dataset):
+    def __init__(self, samples, transform=None, pairs_per_epoch=None):
         self.samples = samples
+        self.transform = transform
+        self.len = pairs_per_epoch if pairs_per_epoch else len(samples)
+        self.bins = [(0, 5), (5, 20), (20, 50), (50, 1000)]
 
-    def __len__(self):
-        return len(self.samples)
+    def __len__(self): return self.len
 
     def __getitem__(self, idx):
-        img_a, year_a = self.samples[idx]
+        img_a_pil, year_a = self.samples[idx % len(self.samples)]
+        target_min, target_max = random.choice(self.bins)
         
-        # Pick a random second image
-        idx_b = random.randint(0, len(self.samples) - 1)
-        img_b, year_b = self.samples[idx_b]
+        img_b_pil, year_b = None, None
+        for _ in range(50):
+            cand_img, cand_year = random.choice(self.samples)
+            if target_min <= abs(year_a - cand_year) < target_max:
+                img_b_pil, year_b = cand_img, cand_year
+                break
         
-        # Label: Is A newer than B?
+        if img_b_pil is None: img_b_pil, year_b = random.choice(self.samples)
+
+        img_a = self.transform(img_a_pil) if self.transform else img_a_pil
+        img_b = self.transform(img_b_pil) if self.transform else img_b_pil
         label = torch.tensor(1.0 if year_a > year_b else 0.0, dtype=torch.float32)
-        
-        return img_a, img_b, label
+        if year_a == year_b: label = torch.tensor(0.5)
+            
+        return img_a, img_b, label, year_a, year_b
 
-train_dataset = PairwiseDataset(train_base_samples)
-val_dataset = PairwiseDataset(val_base_samples)
-
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
-
-print(f"Total base samples: {len(all_samples)}")
-print(f"Train pairs per epoch: {len(train_dataset)}")
+train_loader = DataLoader(BalancedPairwiseDataset(train_base, transform), batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(BalancedPairwiseDataset(val_base, transform), batch_size=BATCH_SIZE, shuffle=False)
 
 # ---------------- MODEL ----------------
 model, _ = create_model(type=MODEL_TYPE, device=DEVICE)
-ckpt_path = os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME)
-model.load_state_dict(torch.load(ckpt_path, map_location=DEVICE))
-model.eval()
+model.load_state_dict(torch.load(os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME), map_location=DEVICE))
+encoder = model.encoder
+encoder.eval()
 
-# Freeze encoder
-for p in model.parameters():
-    p.requires_grad = False
+# Freeze encoder entirely
+for p in encoder.parameters(): p.requires_grad = False
 
-# Infer embedding dim
 with torch.no_grad():
-    dummy = torch.zeros(1, 3, 256, 256).to(DEVICE)
-    emb_dim = model.encoder(dummy).shape[1]
+    emb_dim = encoder(torch.zeros(1, 3, 256, 256).to(DEVICE)).shape[1]
 
-# Pairwise Probe: Input is concatenation of two embeddings (dim*2)
 if PROBE_TYPE == "linear":
     classifier = nn.Linear(emb_dim * 2, 1).to(DEVICE)
 else:
@@ -128,92 +103,64 @@ else:
         nn.Linear(256, 1)
     ).to(DEVICE)
 
-criterion = nn.BCEWithLogitsLoss()
 optimizer = optim.Adam(classifier.parameters(), lr=LR)
+criterion = nn.BCEWithLogitsLoss()
 
-# ---------------- TRAIN/EVAL FUNCTIONS ----------------
-def run_epoch(loader, is_train=True):
-    if is_train:
-        classifier.train()
-    else:
-        classifier.eval()
-        
-    total_loss = 0.0
-    correct = 0
-    total = 0
-
-    # Gradient context
-    context = torch.enable_grad() if is_train else torch.no_grad()
+# ---------------- EVAL ----------------
+def evaluate(loader):
+    classifier.eval()
+    bins = {"0-5": [0,0], "5-20": [0,0], "20-50": [0,0], "50+": [0,0]}
     
-    with context:
-        for img_a, img_b, y in loader:
+    with torch.no_grad():
+        for img_a, img_b, y, y_a, y_b in loader:
+            mask = (y != 0.5)
+            if not mask.any(): continue
+            
             img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
-
-            # Get embeddings (frozen)
-            with torch.no_grad():
-                z_a = model.encoder(img_a)
-                z_b = model.encoder(img_b)
+            # Encoder is frozen, so we use it as a feature extractor
+            z = torch.cat([encoder(img_a), encoder(img_b)], dim=1)
+            logits = classifier(z).squeeze(1)
             
-            # Concatenate features
-            z_combined = torch.cat([z_a, z_b], dim=1)
-            
-            logits = classifier(z_combined).squeeze(1)
-            loss = criterion(logits, y)
-
-            if is_train:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-            # Stats
             preds = (torch.sigmoid(logits) > 0.5).float()
-            correct += (preds == y).sum().item()
-            total += y.numel()
-            total_loss += loss.item()
+            correct = (preds == y).cpu().numpy()
+            diffs = torch.abs(y_a - y_b).numpy()
+            
+            for i in range(len(diffs)):
+                if y[i] == 0.5: continue
+                d = diffs[i]
+                b = "0-5" if d <= 5 else "5-20" if d <= 20 else "20-50" if d <= 50 else "50+"
+                bins[b][0] += int(correct[i])
+                bins[b][1] += 1
+    return bins
 
-    return total_loss / len(loader), correct / total
-
-# ---------------- MAIN LOOP ----------------
-print(f"\nStarting {PROBE_TYPE} pairwise deathyear comparison...")
-
+# ---------------- TRAIN ----------------
+print(f"Starting {PROBE_TYPE} probing (Frozen Encoder)...")
 for epoch in range(NUM_EPOCHS):
-    train_loss, train_acc = run_epoch(train_loader, is_train=True)
-    val_loss, val_acc = run_epoch(val_loader, is_train=False)
-
-    print(f"[Epoch {epoch+1:02d}] Train Acc: {train_acc:.3f} | Val Acc: {val_acc:.3f} | Val Loss: {val_loss:.4f}")
-
-# ---------------- CONFUSION MATRIX ----------------
-classifier.eval()
-y_true, y_pred = [], []
-
-with torch.no_grad():
-    for img_a, img_b, y in val_loader:
-        img_a, img_b = img_a.to(DEVICE), img_b.to(DEVICE)
-        z_comb = torch.cat([model.encoder(img_a), model.encoder(img_b)], dim=1)
-        logits = classifier(z_comb).squeeze(1)
-        preds = (torch.sigmoid(logits) > 0.5).float()
+    classifier.train()
+    for img_a, img_b, y, _, _ in train_loader:
+        img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
         
-        y_true.append(y.cpu())
-        y_pred.append(preds.cpu())
+        with torch.no_grad():
+            z = torch.cat([encoder(img_a), encoder(img_b)], dim=1)
+        
+        logits = classifier(z).squeeze(1)
+        loss = criterion(logits, y)
+        
+        optimizer.zero_grad(); loss.backward(); optimizer.step()
 
-y_true = torch.cat(y_true).numpy()
-y_pred = torch.cat(y_pred).numpy()
+    val_bins = evaluate(val_loader)
+    overall_acc = sum(b[0] for b in val_bins.values()) / sum(b[1] for b in val_bins.values())
+    print(f"Epoch {epoch+1:02d} | Acc: {overall_acc:.3f} | " + 
+          " ".join([f"{k}:{v[0]/v[1]:.2f}" for k,v in val_bins.items() if v[1]>0]))
 
-cm = confusion_matrix(y_true, y_pred)
-# Reorder to [A is Larger, B is Larger]
-cm = cm[[1, 0], :][:, [1, 0]]
+print("Finetuning complete.")
 
-# Plotting
-plt.figure(figsize=(4, 4))
-sns.heatmap(cm.astype(float)/cm.sum()*100, annot=True, fmt=".1f", cmap="Blues",
-            xticklabels=["A Larger", "B Larger"], yticklabels=["A Larger", "B Larger"])
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-plt.gca().xaxis.set_label_position('top')
-plt.gca().xaxis.tick_top()
-
-save_path = f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}/{CONF_MAT_SAVE_NAME}"
-os.makedirs(os.path.dirname(save_path), exist_ok=True)
-plt.tight_layout()
-plt.savefig(save_path, dpi=300)
-print(f"\n✅ Finished. Confusion matrix saved to {save_path}")
+# ---------------- PLOT ----------------
+labels, accs = list(val_bins.keys()), [v[0]/v[1] for v in val_bins.values()]
+plt.bar(labels, accs)
+plt.xlabel("Year Gap Bins")
+plt.ylabel("Validation Accuracy")
+plt.ylim(0,1)
+# plt.title(f"{PROBE_TYPE.capitalize()} Probing Accuracy by Year Gap")
+save_name = f"{MODEL_TYPE}_{PROBE_TYPE}_{TARGET_LABEL}.png"
+plt.savefig(os.path.join(f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}", save_name))

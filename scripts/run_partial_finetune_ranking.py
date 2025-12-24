@@ -6,185 +6,191 @@ import torch.optim as optim
 from torchvision import transforms
 import webdataset as wds
 from torch.utils.data import DataLoader, Dataset
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from utils import create_model, seed_everything
 
 # ---------------- CONFIG ----------------
 DATA_ROOT = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled_shards"
 SHARDS = "labeled_shard_{000000..000009}.tar"
-
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
+
 MODEL_TYPE = "mae"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
-
-NUM_TUNE_LAYERS = 1     # <-- K: final transformer blocks to finetune
-HEAD_TYPE = "linear"    # OPTIONS: "linear", "nonlinear"
-LR_ENCODER = 1e-5
-LR_HEAD = 1e-3
-
-CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_partial{NUM_TUNE_LAYERS}_deathyear.png"
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+NUM_TUNE_LAYERS = 1
 
 BATCH_SIZE = 64
 NUM_EPOCHS = 100
 SEED = 42
 TRAIN_SPLIT = 0.8
+
+LR_ENCODER = 1e-5
+LR_HEAD = 1e-3
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ----------------------------------------
 
 seed_everything(SEED)
 
-# ---------------- DATA LOADING ----------------
-transform = transforms.Compose([transforms.ToTensor()])
+# ---------------- DATA PREP ----------------
+transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(0.1, 0.1, 0.1),
+    transforms.ToTensor(),
+])
+val_transform = transforms.Compose([transforms.ToTensor()])
 
 def make_sample(sample):
-    if "jpg" not in sample or "json" not in sample:
-        return None
+    if "jpg" not in sample or "json" not in sample: return None
     labels = sample["json"]
-    if labels.get(TARGET_LABEL) is None:
-        return None
-    image = transform(sample["jpg"])
-    target = float(labels[TARGET_LABEL])
-    return image, target
+    if labels.get(TARGET_LABEL) is None: return None
+    return sample["jpg"], float(labels[TARGET_LABEL])
 
-dataset = (
-    wds.WebDataset(os.path.join(DATA_ROOT, SHARDS))
-    .decode("pil")
-    .map(make_sample)
-)
+# Load and split
+dataset = wds.WebDataset(os.path.join(DATA_ROOT, SHARDS)).decode("pil").map(make_sample)
 all_samples = [s for s in dataset if s is not None]
 
-# Random Split
-indices = list(range(len(all_samples)))
-random.shuffle(indices)
+random.shuffle(all_samples)
 split_idx = int(len(all_samples) * TRAIN_SPLIT)
-train_indices, val_indices = indices[:split_idx], indices[split_idx:]
+train_base = all_samples[:split_idx]
+val_base = all_samples[split_idx:]
 
-train_base = [all_samples[i] for i in train_indices]
-val_base = [all_samples[i] for i in val_indices]
-
-# NOTE: "True" label if first is LARGER (newer)
-class PairwiseDataset(Dataset):
-    def __init__(self, samples):
+# ---------------- BALANCED DATASET ----------------
+class BalancedPairwiseDataset(Dataset):
+    def __init__(self, samples, transform=None, pairs_per_epoch=None):
         self.samples = samples
+        self.transform = transform
+        # If not specified, one epoch = one pass through all images as 'image A'
+        self.len = pairs_per_epoch if pairs_per_epoch else len(samples)
+        # bins for year gaps: 0-5, 5-20, 20-50, 50+
+        self.bins = [(0, 5), (5, 20), (20, 50), (50, 1000)]
+
     def __len__(self):
-        return len(self.samples)
+        return self.len
+
     def __getitem__(self, idx):
-        img_a, year_a = self.samples[idx]
-        img_b, year_b = self.samples[random.randint(0, len(self.samples) - 1)]
-        label = torch.tensor(1.0 if year_a > year_b else 0.0, dtype=torch.float32)
-        return img_a, img_b, label
+        # Pick Image A
+        img_a_pil, year_a = self.samples[idx % len(self.samples)]
+        
+        # Target a specific year gap bin to ensure even distribution
+        target_min, target_max = random.choice(self.bins)
+        
+        img_b_pil, year_b = None, None
+        # Attempt to find a partner in the target bin
+        for _ in range(100):
+            cand_img, cand_year = random.choice(self.samples)
+            diff = abs(year_a - cand_year)
+            if target_min <= diff < target_max:
+                img_b_pil, year_b = cand_img, cand_year
+                break
+        
+        # Fallback if bin is empty/hard to find
+        if img_b_pil is None:
+            img_b_pil, year_b = random.choice(self.samples)
 
-train_loader = DataLoader(PairwiseDataset(train_base), batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-val_loader = DataLoader(PairwiseDataset(val_base), batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+        img_a = self.transform(img_a_pil) if self.transform else img_a_pil
+        img_b = self.transform(img_b_pil) if self.transform else img_b_pil
+        
+        # Use 0.5 for ties, though rare in continuous years
+        if year_a == year_b:
+            label = 0.5
+        else:
+            label = 1.0 if year_a > year_b else 0.0
+            
+        return img_a, img_b, torch.tensor(label, dtype=torch.float32), year_a, year_b
 
-# ---------------- MODEL & PARTIAL UNFREEZING ----------------
+train_loader = DataLoader(BalancedPairwiseDataset(train_base, transform), batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(BalancedPairwiseDataset(val_base, val_transform), batch_size=BATCH_SIZE, shuffle=False)
+
+# ---------------- MODEL ----------------
 model, _ = create_model(type=MODEL_TYPE, device=DEVICE)
 model.load_state_dict(torch.load(os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME), map_location=DEVICE))
 
 encoder = model.encoder
-encoder.train()
-
-# Freeze all, then unfreeze last K blocks + final norm
-for p in encoder.parameters():
-    p.requires_grad = False
+for p in encoder.parameters(): p.requires_grad = False
 for block in encoder.transformer.layers[-NUM_TUNE_LAYERS:]:
-    for p in block.parameters():
-        p.requires_grad = True
-for p in encoder.transformer.norm.parameters():
-    p.requires_grad = True
+    for p in block.parameters(): p.requires_grad = True
+encoder.transformer.norm.requires_grad_(True)
 
-# Infer dim
+# infer embedding dim
 with torch.no_grad():
-    emb_dim = encoder(torch.zeros(1, 3, 256, 256).to(DEVICE)).shape[1]
+    dummy = torch.zeros(1, 3, 256, 256).to(DEVICE)
+    emb_dim = model.encoder(dummy).shape[1]
 
-# Pairwise Head
-if HEAD_TYPE == "linear":
-    classifier = nn.Linear(emb_dim * 2, 1).to(DEVICE)
-else:
-    classifier = nn.Sequential(
-        nn.Linear(emb_dim * 2, 256),
-        nn.ReLU(),
-        nn.Linear(256, 1)
-    ).to(DEVICE)
+print("Encoder embedding dimension:", emb_dim)
 
-criterion = nn.BCEWithLogitsLoss()
+classifier = nn.Sequential(
+    nn.Linear(emb_dim * 2, 256),
+    nn.ReLU(),
+    nn.Linear(256, 1)
+).to(DEVICE)
+
 optimizer = optim.AdamW([
     {"params": classifier.parameters(), "lr": LR_HEAD},
     {"params": [p for p in encoder.parameters() if p.requires_grad], "lr": LR_ENCODER},
-], weight_decay=1e-4)
+], weight_decay=1e-2)
+criterion = nn.BCEWithLogitsLoss()
 
-# ---------------- TRAIN/EVAL ----------------
-def run_epoch(loader, is_train=True):
-    classifier.train() if is_train else classifier.eval()
-    encoder.train() if is_train else encoder.eval()
+# ---------------- EVAL ----------------
+def evaluate(loader):
+    encoder.eval(); classifier.eval()
+    bins = {"0-5": [0,0], "5-20": [0,0], "20-50": [0,0], "50+": [0,0]}
+    total_loss = 0
     
-    total_loss, correct, total = 0.0, 0, 0
-    context = torch.enable_grad() if is_train else torch.no_grad()
-    
-    with context:
-        for img_a, img_b, y in loader:
-            img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
-
-            # Pass both through encoder (gradients will flow if is_train)
-            z_a = encoder(img_a)
-            z_b = encoder(img_b)
-            z_combined = torch.cat([z_a, z_b], dim=1)
+    with torch.no_grad():
+        for img_a, img_b, y, y_a, y_b in loader:
+            # Skip ties for accuracy calculation
+            mask = (y != 0.5)
+            if not mask.any(): continue
             
-            logits = classifier(z_combined).squeeze(1)
-            loss = criterion(logits, y)
-
-            if is_train:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-            preds = (torch.sigmoid(logits) > 0.5).float()
-            correct += (preds == y).sum().item()
-            total += y.numel()
+            img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
+            z = torch.cat([encoder(img_a), encoder(img_b)], dim=1)
+            logits = classifier(z).squeeze(1)
+            
+            loss = criterion(logits[mask], y[mask])
             total_loss += loss.item()
+            
+            preds = (torch.sigmoid(logits) > 0.5).float()
+            correct = (preds == y).cpu().numpy()
+            diffs = torch.abs(y_a - y_b).numpy()
+            
+            for i in range(len(diffs)):
+                if y[i] == 0.5: continue
+                d = diffs[i]
+                b = "0-5" if d <= 5 else "5-20" if d <= 20 else "20-50" if d <= 50 else "50+"
+                bins[b][0] += int(correct[i])
+                bins[b][1] += 1
+    return total_loss/len(loader), bins
 
-    return total_loss / len(loader), correct / total
-
-# ---------------- MAIN ----------------
-print(f"Finetuning {NUM_TUNE_LAYERS} layers for Pairwise Deathyear...")
-
+# ---------------- TRAIN ----------------
+print(f"Starting Balanced Finetuning ({NUM_TUNE_LAYERS} layers)...")
 for epoch in range(NUM_EPOCHS):
-    tr_loss, tr_acc = run_epoch(train_loader, is_train=True)
-    val_loss, val_acc = run_epoch(val_loader, is_train=False)
-    print(f"[Epoch {epoch+1:02d}] Train Acc: {tr_acc:.3f} | Val Acc: {val_acc:.3f}")
+    encoder.train(); classifier.train()
+    for img_a, img_b, y, _, _ in train_loader:
+        img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
+        
+        # We can optimize the pass by stacking: (2*B, C, H, W)
+        z = torch.cat([encoder(img_a), encoder(img_b)], dim=1)
+        logits = classifier(z).squeeze(1)
+        loss = criterion(logits, y)
+        
+        optimizer.zero_grad(); loss.backward(); optimizer.step()
 
-# ---------------- CONFUSION MATRIX ----------------
-classifier.eval()
-encoder.eval()
-y_true, y_pred = [], []
+    val_loss, val_bins = evaluate(val_loader)
+    
+    overall_acc = sum(b[0] for b in val_bins.values()) / sum(b[1] for b in val_bins.values())
+    print(f"Epoch {epoch+1:02d} | Acc: {overall_acc:.3f} | Bins: " + 
+          " ".join([f"{k}:{v[0]/v[1]:.2f}" for k,v in val_bins.items() if v[1]>0]))
+    
+print("Finetuning complete.")
 
-with torch.no_grad():
-    for img_a, img_b, y in val_loader:
-        z = torch.cat([encoder(img_a.to(DEVICE)), encoder(img_b.to(DEVICE))], dim=1)
-        preds = (torch.sigmoid(classifier(z).squeeze(1)) > 0.5).float()
-        y_true.append(y.cpu())
-        y_pred.append(preds.cpu())
-
-y_true, y_pred = torch.cat(y_true).numpy(), torch.cat(y_pred).numpy()
-cm = confusion_matrix(y_true, y_pred)
-cm = cm[[1, 0], :][:, [1, 0]] # Reorder for [A-Larger, B-Larger]
-
-plt.figure(figsize=(4, 4))
-sns.heatmap(cm.astype(float)/cm.sum()*100, annot=True, fmt=".1f", cmap="Blues",
-            xticklabels=["A Larger", "B Larger"], yticklabels=["A Larger", "B Larger"], cbar=False)
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-plt.gca().xaxis.set_label_position('top')
-plt.gca().xaxis.tick_top()
-
-save_path = os.path.join("/cluster/home/jiapan/Supervised_Research/plots/", MODEL_TYPE, CONF_MAT_SAVE_NAME)
-os.makedirs(os.path.dirname(save_path), exist_ok=True)
-plt.tight_layout()
-plt.savefig(save_path, dpi=300)
-print(f"Confusion matrix saved to {save_path}")
+# ---------------- PLOT ----------------
+labels = list(val_bins.keys())
+accs = [v[0]/v[1] if v[1]>0 else 0 for v in val_bins.values()]
+plt.bar(labels, accs)
+plt.xlabel("Year Gap Bins")
+plt.ylabel("Validation Accuracy")
+# plt.title("Performance Ceiling by Year Gap")
+plt.savefig(f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}/{MODEL_TYPE}_partial{str(NUM_TUNE_LAYERS)}_{TARGET_LABEL}.png")
