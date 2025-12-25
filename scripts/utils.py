@@ -93,28 +93,6 @@ def seed_everything(seed) -> None:
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-    
-    
-def find_corner_indices(Z, k=3):
-    """
-    Returns indices of k points closest to each of the 4 corners.
-    """
-    corners = np.array([
-        [Z[:, 0].min(), Z[:, 1].min()],  # bottom-left
-        [Z[:, 0].min(), Z[:, 1].max()],  # top-left
-        [Z[:, 0].max(), Z[:, 1].min()],  # bottom-right
-        [Z[:, 0].max(), Z[:, 1].max()],  # top-right
-    ])
-
-    indices = set()
-    for c in corners:
-        dists = np.linalg.norm(Z - c, axis=1)
-        # Get indices of k smallest distances
-        nearest_k = np.argsort(dists)[:k]
-        for idx in nearest_k:
-            indices.add(idx)
-
-    return list(indices)
 
 
 def create_2x2_grid(tensors, border_width=4):

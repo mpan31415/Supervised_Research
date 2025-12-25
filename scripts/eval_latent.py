@@ -8,7 +8,7 @@ import scienceplots
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-from utils import create_model, find_corner_indices, overlay_corner_grids
+from utils import create_model, overlay_corner_grids
 
 current_dir = Path.cwd()
 project_root = current_dir.parent
@@ -76,74 +76,27 @@ model.eval()
 print(f"✅ Successfully loaded model weights from: {ckpt_path}")
 
 
-################## 3. FORWARD PASS ON FEW SAMPLE IMAGES ##################
-START_IDX = 20
-NUM_SAMPLES = 5
-
-sample_tensors = image_tensors_list[START_IDX:START_IDX+NUM_SAMPLES]
-image_batch = torch.stack(sample_tensors, dim=0).to(DEVICE)
-print(f"Successfully created a batch of {image_batch.shape[0]} images.")
-print(f"Batch shape: {image_batch.shape}")
-
-# get latent embeddings
-with torch.no_grad():
-    latent_embeddings = model.encoder(image_batch)
-
-# 5. Print the size of the output tensor
-print("\n--- Model Output ---")
-print(f"Shape of latent embeddings (Encoder Output Size): **{latent_embeddings.shape}**")
-print(f"The number of embeddings is {latent_embeddings.shape[0]}, and the dimensionality is {latent_embeddings.shape[1]}.")
+###### HELPER FUNCTION ######
+def encode_in_batches(model, images, batch_size=32):
+    latents = []
+    model.eval()
+    with torch.no_grad():
+        for i in range(0, len(images), batch_size):
+            batch = images[i:i+batch_size].to(DEVICE)
+            z = model.encoder(batch)
+            latents.append(z.cpu())
+            del batch, z
+            torch.cuda.empty_cache()
+    return torch.cat(latents, dim=0)
 
 
-################## 4. VISUALIZE LATENT EMBEDDINGS ##################
-# --- VISUALIZATION PARAMETERS ---
-FEATURE_MAP_SHAPE = (32, 24)    # 32 * 24 = 768
-
-# --- PLOTTING ---
-fig, axes = plt.subplots(nrows=2, ncols=NUM_SAMPLES, figsize=(3 * NUM_SAMPLES, 6))
-# plt.suptitle(f"Input Images and Latent Embeddings (Reshaped)", fontsize=16)
-
-for i in range(NUM_SAMPLES):
-    # --- Row 1: Original Input Image (3x256x256) ---
-    ax_img = axes[0, i]
-    
-    # PyTorch format is C x H x W; Matplotlib needs H x W x C
-    img_display = image_batch[i].permute(1, 2, 0).cpu().numpy()
-    
-    # Ensure image is in the correct range for plotting (0-1 floats or 0-255 ints)
-    ax_img.imshow(img_display)
-    # ax_img.set_title(f"Image {i+1}", fontsize=12)
-    ax_img.axis('off')
-
-    # --- Row 2: Latent Embedding (768-dim) ---
-    ax_latent = axes[1, i]
-
-    # Reshape the 768-dim vector into a 2D feature map
-    latent_map = latent_embeddings[i].view(*FEATURE_MAP_SHAPE).cpu().numpy()
-    
-    # Use imshow to visualize the 2D array. 'cmap' sets the color scheme.
-    # 'interpolation' is set to 'nearest' for a sharp, pixelated look.
-    im = ax_latent.imshow(latent_map, cmap='viridis', aspect='auto', interpolation='nearest')
-    
-    # ax_latent.set_title(f"Latent Map {i+1}", fontsize=12)
-    ax_latent.set_xticks([])
-    ax_latent.set_yticks([])
-
-# Add a colorbar to the right of the entire latent row to show value mapping
-cbar_ax = fig.add_axes([0.92, 0.1, 0.01, 0.35])      # [left, bottom, width, height]
-fig.colorbar(im, cax=cbar_ax, label='Latent Vector Value')
-# save plot
-# plt.tight_layout()
-plt.savefig(plot_save_dir + "/" + model_type + "_cls_vec.png", dpi=600)
-plt.close()
-print("✅ Latent visualization plot saved.")
-
-
-################## 5. PCA and t-SNE ON ALL IMAGES ##################
-all_img_batch = torch.stack(image_tensors_list, dim=0).to(DEVICE)
-# get latent embeddings
-with torch.no_grad():
-    latent_embeddings = model.encoder(all_img_batch)
+################## 3. PCA and t-SNE ON ALL IMAGES ##################
+all_img_batch = torch.stack(image_tensors_list, dim=0)
+latent_embeddings = encode_in_batches(
+    model,
+    all_img_batch,
+    batch_size=100
+)
 
 print("\n--- Model Output ---")
 print(f"Shape of latent embeddings (Encoder Output Size): **{latent_embeddings.shape}**")
@@ -157,10 +110,11 @@ ax = plt.gca()
 ax.scatter(Z_pca[:, 0], Z_pca[:, 1], s=15, alpha=0.4, c='gray', edgecolors='none')
 overlay_corner_grids(ax, Z_pca, image_tensors_list, zoom=0.2)
 # ax.set_title("PCA of Latent Embeddings (with extreme images)", fontsize=16)
-ax.set_xlabel("Principal Component 1", fontsize=12)
-ax.set_ylabel("Principal Component 2", fontsize=12)
+ax.tick_params(axis='both', which='major', labelsize=16)
+ax.set_xlabel("Principal Component 1", fontsize=18)
+ax.set_ylabel("Principal Component 2", fontsize=18)
 ax.grid(True)
-plt.savefig(plot_save_dir + "/" + model_type + "_pca.png", dpi=600)
+plt.savefig(plot_save_dir + "/" + model_type + "_pca.png", dpi=300)
 plt.close()
 print("PCA plot saved.")
 
@@ -179,15 +133,16 @@ ax = plt.gca()
 ax.scatter(Z_tsne[:, 0], Z_tsne[:, 1], s=15, alpha=0.4, c='gray', edgecolors='none')
 overlay_corner_grids(ax, Z_tsne, image_tensors_list, zoom=0.2)
 # ax.set_title("t-SNE of Latent Embeddings (with extreme images)", fontsize=16)
-ax.set_xlabel("t-SNE Dimension 1", fontsize=12)
-ax.set_ylabel("t-SNE Dimension 2", fontsize=12)
+ax.tick_params(axis='both', which='major', labelsize=16)
+ax.set_xlabel("t-SNE Dimension 1", fontsize=18)
+ax.set_ylabel("t-SNE Dimension 2", fontsize=18)
 ax.grid(True)
-plt.savefig(plot_save_dir + "/" + model_type + "_tsne.png", dpi=600)
+plt.savefig(plot_save_dir + "/" + model_type + "_tsne.png", dpi=300)
 plt.close()
 print("t-SNE plot saved.")
 
 
-################## 6. PCA EXPLAIN INFORMATION ##################
+################## 4. PCA EXPLAIN INFORMATION ##################
 pca = PCA().fit(latent_embeddings)
 indices = np.arange(0, 31)
 expl_var_ratios = [0] + list(np.cumsum(pca.explained_variance_ratio_[:30]))
@@ -195,11 +150,12 @@ expl_var_ratios = [0] + list(np.cumsum(pca.explained_variance_ratio_[:30]))
 plt.figure(figsize=(8, 6))
 ax = plt.gca()
 ax.plot(indices, expl_var_ratios, marker='o')
-ax.set_xlabel('Number of Components', fontsize=12)
-ax.set_ylabel('Cumulative Explained Variance', fontsize=12)
+ax.tick_params(axis='both', which='major', labelsize=16)
+ax.set_xlabel('Number of Components', fontsize=18)
+ax.set_ylabel('Cumulative Explained Variance', fontsize=18)
 # ax.set_title('PCA Explained Variance', fontsize=16)
 ax.grid(True)
-plt.savefig(plot_save_dir + "/" + model_type + "_expl_var.png", dpi=600)
+plt.savefig(plot_save_dir + "/" + model_type + "_expl_var.png", dpi=300)
 plt.close()
 print("Explained variance plot saved.")
 
