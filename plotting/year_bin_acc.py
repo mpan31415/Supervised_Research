@@ -9,14 +9,22 @@ plt.rcParams.update({
     "text.usetex": False,
 })
 
-# Data
-MODEL_TYPE = "mae"
+# # MAE Data
+# MODEL_TYPE = "mae"
+# layers_0_acc = [0.52, 0.61, 0.78, 0.81]
+# layers_1_acc = [0.57, 0.64, 0.78, 0.82]
+# layers_2_acc = [0.56, 0.62, 0.77, 0.82]
+# layers_4_acc = [0.56, 0.64, 0.8, 0.83]
+# layers_8_acc = [0.57, 0.7, 0.81, 0.83]
 
-layers_0_acc = [0.52, 0.61, 0.78, 0.81]
-layers_1_acc = [0.57, 0.64, 0.78, 0.82]
-layers_2_acc = [0.56, 0.62, 0.77, 0.82]
-layers_4_acc = [0.56, 0.64, 0.8, 0.83]
-layers_8_acc = [0.57, 0.7, 0.81, 0.83]
+# DINO Data
+MODEL_TYPE = "dino"
+layers_0_acc = [0.57, 0.59, 0.82, 0.85]
+layers_1_acc = [0.59, 0.69, 0.82, 0.84]
+layers_2_acc = [0.58, 0.68, 0.82, 0.88]
+layers_4_acc = [0.58, 0.69, 0.82, 0.88]
+layers_8_acc = [0.6, 0.72, 0.82, 0.89]
+
 
 all_layers = [layers_0_acc, layers_1_acc, layers_2_acc, layers_4_acc, layers_8_acc]
 labels = ['K=0', 'K=1', 'K=2', 'K=4', 'K=8']

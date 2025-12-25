@@ -21,9 +21,9 @@ CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 MODEL_TYPE = "dino"
 CKPT_NAME = "epoch_100.pth"
 
-TARGET_LABEL = "is_military"    # OPTIONS: "is_military", "has_cross"
+TARGET_LABEL = "has_cross"    # OPTIONS: "is_military", "has_cross"
 
-NUM_TUNE_LAYERS = 1     # <-- K: number of final transformer blocks to finetune
+NUM_TUNE_LAYERS = 8     # <-- K: number of final transformer blocks to finetune
 HEAD_TYPE = "linear"    # OPTIONS: "linear", "nonlinear"
 LR_ENCODER = 1e-5
 LR_HEAD = 1e-3

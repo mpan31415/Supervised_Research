@@ -9,13 +9,20 @@ plt.rcParams.update({
     "text.usetex": False,
 })
 
-# Data
-MODEL_TYPE = "mae"
-
 x = [0, 1, 2, 4, 8]
-is_military_vec = [0.908, 0.931, 0.932, 0.935, 0.943]
-has_cross_vec = [0.743, 0.825, 0.826, 0.828, 0.819]
-year_rank_vec = [0.715, 0.725, 0.731, 0.73, 0.747]
+
+# # MAE Data
+# MODEL_TYPE = "mae"
+# is_military_vec = [0.908, 0.931, 0.932, 0.935, 0.943]
+# has_cross_vec = [0.743, 0.825, 0.826, 0.828, 0.819]
+# year_rank_vec = [0.715, 0.725, 0.731, 0.73, 0.747]
+
+# DINO Data
+MODEL_TYPE = "dino"
+is_military_vec = [0.928, 0.935, 0.936, 0.94, 0.955]
+has_cross_vec = [0.715, 0.751, 0.784, 0.833, 0.841]
+year_rank_vec = [0.752, 0.756, 0.759, 0.768, 0.774]
+
 
 # Create figure
 plt.figure(figsize=(6, 4))

@@ -19,7 +19,7 @@ MODEL_TYPE = "dino"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
-NUM_TUNE_LAYERS = 1          # K: number of transformer layers to unfreeze
+NUM_TUNE_LAYERS = 8          # K: number of transformer layers to unfreeze
 
 BATCH_SIZE = 64
 NUM_EPOCHS = 100

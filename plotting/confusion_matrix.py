@@ -3,8 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-MODEL_TYPE = "mae"
-CKPT_NAME = "epoch_100.pth"
+MODEL_TYPE = "dino"
 
 TARGET_LABEL = "is_military"    # OPTIONS: "is_military", "has_cross"
 
@@ -15,8 +14,8 @@ CONF_MAT_SAVE_NAME = f"{MODEL_TYPE}_{PROBE_TYPE}_{TARGET_LABEL}.png"
 
 ################# DATA #################
 cm_percent = np.array([
-    [18.2, 3.1], 
-    [2.5, 76.0]
+    [18.9, 2.5], 
+    [1.9, 76.6]
 ])
 
 sns.heatmap(
