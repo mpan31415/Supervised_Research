@@ -16,9 +16,9 @@ from utils import create_model, seed_everything
 # ---------------- CONFIG ----------------
 DATA_ROOT = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled_shards"
 SHARDS = "labeled_shard_{000000..000009}.tar"
-
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
-MODEL_TYPE = "mae"
+
+MODEL_TYPE = "dino"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "is_military"    # OPTIONS: "is_military", "has_cross"
@@ -115,14 +115,21 @@ print_class_ratios(train_samples, TARGET_LABEL)
 print_class_ratios(val_samples, TARGET_LABEL)
 
 # ---------------- MODEL ----------------
-model, _ = create_model(type=MODEL_TYPE, device=DEVICE)
+# NOTE: to bypass deepcopy bug in DINO implementation, use create_model with type="mae" for both MAE and DINO
+model, _ = create_model(type="mae", device=DEVICE)
+
 ckpt_path = os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME)
 state_dict = torch.load(ckpt_path, map_location=DEVICE)
-model.load_state_dict(state_dict)
-model.eval()
 
-encoder = model.encoder
-encoder.train()
+if MODEL_TYPE == "mae":
+    model.load_state_dict(state_dict)
+    encoder = model.encoder
+    encoder.train()
+else:
+    encoder = model.encoder
+    encoder.load_state_dict(state_dict)
+    encoder.train()
+print(f"✅ Successfully loaded model weights from: {ckpt_path}")
 
 # ---- Freeze everything ----
 for p in encoder.parameters():
@@ -262,18 +269,19 @@ sns.heatmap(
     annot=True,
     fmt=".1f",
     cmap="Blues",
-    xticklabels=["Positive", "Negative"],
-    yticklabels=["Positive", "Negative"],
-    cbar=False
+    xticklabels=["True", "False"],
+    yticklabels=["True", "False"],
+    cbar=False,
+    annot_kws={"size": 40}
 )
 
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-# plt.title(f"Confusion Matrix ({TARGET_LABEL}) [%]")
+plt.xlabel("Predicted", fontsize=40)
+plt.ylabel("Actual", fontsize=40)
 
 # Move x-axis labels to top
 plt.gca().xaxis.set_label_position('top')
 plt.gca().xaxis.tick_top()
+plt.gca().tick_params(axis='both', which='major', labelsize=40)
 
 save_path = "/cluster/home/jiapan/Supervised_Research/plots/" + MODEL_TYPE + "/" + CONF_MAT_SAVE_NAME
 

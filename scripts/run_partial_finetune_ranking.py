@@ -15,11 +15,11 @@ DATA_ROOT = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled
 SHARDS = "labeled_shard_{000000..000009}.tar"
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 
-MODEL_TYPE = "mae"
+MODEL_TYPE = "dino"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
-NUM_TUNE_LAYERS = 8          # K: number of transformer layers to unfreeze
+NUM_TUNE_LAYERS = 1          # K: number of transformer layers to unfreeze
 
 BATCH_SIZE = 64
 NUM_EPOCHS = 100
@@ -105,10 +105,22 @@ train_loader = DataLoader(BalancedPairwiseDataset(train_base, transform), batch_
 val_loader = DataLoader(BalancedPairwiseDataset(val_base, val_transform), batch_size=BATCH_SIZE, shuffle=False)
 
 # ---------------- MODEL ----------------
-model, _ = create_model(type=MODEL_TYPE, device=DEVICE)
-model.load_state_dict(torch.load(os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME), map_location=DEVICE))
+# NOTE: to bypass deepcopy bug in DINO implementation, use create_model with type="mae" for both MAE and DINO
+model, _ = create_model(type="mae", device=DEVICE)
 
-encoder = model.encoder
+ckpt_path = os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME)
+state_dict = torch.load(ckpt_path, map_location=DEVICE)
+
+if MODEL_TYPE == "mae":
+    model.load_state_dict(state_dict)
+    encoder = model.encoder
+    encoder.train()
+else:
+    encoder = model.encoder
+    encoder.load_state_dict(state_dict)
+    encoder.train()
+print(f"✅ Successfully loaded model weights from: {ckpt_path}")
+
 for p in encoder.parameters(): p.requires_grad = False
 for block in encoder.transformer.layers[-NUM_TUNE_LAYERS:]:
     for p in block.parameters(): p.requires_grad = True
@@ -117,7 +129,7 @@ encoder.transformer.norm.requires_grad_(True)
 # infer embedding dim
 with torch.no_grad():
     dummy = torch.zeros(1, 3, 256, 256).to(DEVICE)
-    emb_dim = model.encoder(dummy).shape[1]
+    emb_dim = encoder(dummy).shape[1]
 
 print("Encoder embedding dimension:", emb_dim)
 
@@ -187,13 +199,3 @@ for epoch in range(NUM_EPOCHS):
           " ".join([f"{k}:{v[0]/v[1]:.2f}" for k,v in val_bins.items() if v[1]>0]))
     
 print("Finetuning complete.")
-
-# ---------------- PLOT ----------------
-labels = list(val_bins.keys())
-accs = [v[0]/v[1] if v[1]>0 else 0 for v in val_bins.values()]
-plt.bar(labels, accs)
-plt.xlabel("Year Gap Bins")
-plt.ylabel("Validation Accuracy")
-plt.ylim(0,1)
-# plt.title("Performance Ceiling by Year Gap")
-plt.savefig(f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}/{MODEL_TYPE}_partial{str(NUM_TUNE_LAYERS)}_{TARGET_LABEL}.png")

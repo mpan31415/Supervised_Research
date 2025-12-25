@@ -15,7 +15,7 @@ DATA_ROOT = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/labeled
 SHARDS = "labeled_shard_{000000..000009}.tar"
 CKPT_DIR = "/cluster/home/jiapan/Supervised_Research/checkpoints"
 
-MODEL_TYPE = "mae"
+MODEL_TYPE = "dino"
 CKPT_NAME = "epoch_100.pth"
 
 TARGET_LABEL = "deathyear"
@@ -83,10 +83,21 @@ train_loader = DataLoader(BalancedPairwiseDataset(train_base, transform), batch_
 val_loader = DataLoader(BalancedPairwiseDataset(val_base, transform), batch_size=BATCH_SIZE, shuffle=False)
 
 # ---------------- MODEL ----------------
-model, _ = create_model(type=MODEL_TYPE, device=DEVICE)
-model.load_state_dict(torch.load(os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME), map_location=DEVICE))
-encoder = model.encoder
-encoder.eval()
+# NOTE: to bypass deepcopy bug in DINO implementation, use create_model with type="mae" for both MAE and DINO
+model, _ = create_model(type="mae", device=DEVICE)
+
+ckpt_path = os.path.join(CKPT_DIR, MODEL_TYPE, CKPT_NAME)
+state_dict = torch.load(ckpt_path, map_location=DEVICE)
+
+if MODEL_TYPE == "mae":
+    model.load_state_dict(state_dict)
+    encoder = model.encoder
+    encoder.eval()
+else:
+    encoder = model.encoder
+    encoder.load_state_dict(state_dict)
+    encoder.eval()
+print(f"✅ Successfully loaded model weights from: {ckpt_path}")
 
 # Freeze encoder entirely
 for p in encoder.parameters(): p.requires_grad = False
@@ -154,13 +165,3 @@ for epoch in range(NUM_EPOCHS):
           " ".join([f"{k}:{v[0]/v[1]:.2f}" for k,v in val_bins.items() if v[1]>0]))
 
 print("Finetuning complete.")
-
-# ---------------- PLOT ----------------
-labels, accs = list(val_bins.keys()), [v[0]/v[1] for v in val_bins.values()]
-plt.bar(labels, accs)
-plt.xlabel("Year Gap Bins")
-plt.ylabel("Validation Accuracy")
-plt.ylim(0,1)
-# plt.title(f"{PROBE_TYPE.capitalize()} Probing Accuracy by Year Gap")
-save_name = f"{MODEL_TYPE}_{PROBE_TYPE}_{TARGET_LABEL}.png"
-plt.savefig(os.path.join(f"/cluster/home/jiapan/Supervised_Research/plots/{MODEL_TYPE}", save_name))
