@@ -36,8 +36,8 @@ print("device:", DEVICE)
 
 # model checkpoint
 ckpt_dir = "/cluster/home/jiapan/Supervised_Research/checkpoints"
-model_type = "mae"
-ckpt_name = "epoch_100.pth"
+model_type = "dino"
+ckpt_name = "epoch_70.pth"
 
 # plot save dir
 plot_save_dir = str(project_root) + "/plots/" + model_type + "/"
@@ -66,24 +66,32 @@ print("\nAll image tensors are now available in the `image_tensors_list` list.")
 
 ################## 2. CREATE ENCODER & LOAD CHECKPOINT ##################
 # new model object
-model, _ = create_model(type=model_type, device=DEVICE)
+# NOTE: to bypass deepcopy bug in DINO implementation, use create_model with type="mae" for both MAE and DINO
+model, _ = create_model(type="mae", device=DEVICE)
 
 # load checkpoint
 ckpt_path = os.path.join(ckpt_dir, model_type, ckpt_name)
 state_dict = torch.load(ckpt_path, map_location=DEVICE)
-model.load_state_dict(state_dict)
-model.eval()
+
+if model_type == "mae":
+    model.load_state_dict(state_dict)
+    encoder = model.encoder
+    encoder.eval()
+else:
+    encoder = model.encoder
+    encoder.load_state_dict(state_dict)
+    encoder.eval()
 print(f"✅ Successfully loaded model weights from: {ckpt_path}")
 
 
 ###### HELPER FUNCTION ######
-def encode_in_batches(model, images, batch_size=32):
+def encode_in_batches(encoder, images, batch_size=32):
     latents = []
-    model.eval()
+    encoder.eval()
     with torch.no_grad():
         for i in range(0, len(images), batch_size):
             batch = images[i:i+batch_size].to(DEVICE)
-            z = model.encoder(batch)
+            z = encoder(batch)
             latents.append(z.cpu())
             del batch, z
             torch.cuda.empty_cache()
@@ -93,7 +101,7 @@ def encode_in_batches(model, images, batch_size=32):
 ################## 3. PCA and t-SNE ON ALL IMAGES ##################
 all_img_batch = torch.stack(image_tensors_list, dim=0)
 latent_embeddings = encode_in_batches(
-    model,
+    encoder,
     all_img_batch,
     batch_size=100
 )
