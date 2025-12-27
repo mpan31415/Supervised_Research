@@ -23,7 +23,6 @@ Here, we summarize the contents of each of the directories, and the purpose of s
 
 ```
 Supervised_Research/
-├── checkpoints/              # Checkpoints of trained models
 ├── database/                 # Database utility and test scripts
 ├── dataset/                  # Dataset utility and test scripts
 ├── plotting/                 # Scripts for plotting and visualizations
@@ -37,12 +36,18 @@ Supervised_Research/
 └── README.md                 # Project documentation
 ```
 
+Note, the following are found in the ``/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/`` directory:
+```
+├── checkpoints/              # Checkpoints of trained models
+├── plots/                    # Plots generated using pretrained models
+```
+
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 12.2 (already configured in environment.yml)
 - (Optional) CUDA-compatible GPU for accelerated training
 
 ### Setup Instructions
