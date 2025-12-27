@@ -3,7 +3,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-# Your query value (set this to the html_fagid you are looking for)
 html_fagid_query = "1"
 
 con = psycopg.connect(
@@ -14,7 +13,6 @@ con = psycopg.connect(
 
 cur = con.cursor()
 
-# Set search path (optional since you're schema-qualifying anyway)
 cur.execute("SET search_path TO gravestones;")
 
 sql = """

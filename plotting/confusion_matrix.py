@@ -32,7 +32,7 @@ sns.heatmap(
 plt.xlabel("Predicted", fontsize=40)
 plt.ylabel("Actual", fontsize=40)
 
-# Move x-axis labels to top
+# move x-axis labels to top
 plt.gca().xaxis.set_label_position('top')
 plt.gca().xaxis.tick_top()
 plt.gca().tick_params(axis='both', which='major', labelsize=40)

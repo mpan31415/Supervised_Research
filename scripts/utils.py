@@ -45,7 +45,7 @@ def create_model(type: str, device: str) -> Tuple[nn.Module, optim.Optimizer]:
             projection_layers = 3,               # number of layers in projection network
             num_classes_K = 65336,               # output logits dimensions (referenced as K in paper)
             student_temp = 0.1,                  # student temperature
-            teacher_temp = 0.04,                 # teacher temperature, needs to be annealed from 0.04 to 0.07 over 30 epochs
+            teacher_temp = 0.04,                 # teacher temperature
             local_upper_crop_scale = 0.4,        # upper bound for local crop - 0.4 was recommended in the paper 
             global_lower_crop_scale = 0.4,       # lower bound for global crop - 0.5 was recommended in the paper
             moving_average_decay = 0.996,        # moving average of encoder - paper showed anywhere from 0.9 to 0.999 was ok

@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import scienceplots
 import numpy as np
 
-# Use IEEE style
+# use IEEE style
 plt.style.use(['science', 'ieee'])
-# Disable the requirement for a system LaTeX installation
+# disable the requirement for a system LaTeX installation
 plt.rcParams.update({
     "text.usetex": False,
 })
@@ -24,20 +24,20 @@ has_cross_vec = [0.715, 0.751, 0.784, 0.833, 0.841]
 year_rank_vec = [0.752, 0.756, 0.759, 0.768, 0.774]
 
 
-# Create figure
+# create figure
 plt.figure(figsize=(6, 4))
 
-# Marker size
+# marker size
 ms = 8
 
-# Plot lines with markers
+# plot lines with markers
 lines = [
     plt.plot(x, is_military_vec, marker='o', markersize=ms, label='is_military', linewidth=2),
     plt.plot(x, has_cross_vec, marker='s', markersize=ms, label='has_cross', linewidth=2),
     plt.plot(x, year_rank_vec, marker='^', markersize=ms, label='death_year', linewidth=2)
 ]
 
-# Annotate each point with exact value
+# annotate each point with exact value
 for xi, yi in zip(x, is_military_vec):
     plt.text(xi, yi + 0.005, f"{yi:.3f}", ha='center', va='bottom', fontsize=12)
 for xi, yi in zip(x, has_cross_vec):
@@ -45,18 +45,18 @@ for xi, yi in zip(x, has_cross_vec):
 for xi, yi in zip(x, year_rank_vec):
     plt.text(xi, yi + 0.005, f"{yi:.3f}", ha='center', va='bottom', fontsize=12)
 
-# Axis labels
+# axis labels
 plt.xlabel('Number of Finetuned Layers', fontsize=16)
 plt.ylabel('Validation Accuracy', fontsize=16)
 
-# X-axis ticks
-plt.xticks(x)  # ensures 0,1,2,4,8 appear
+# x-axis ticks
+plt.xticks(x)
 plt.gca().tick_params(axis='both', which='major', labelsize=14)
 
 # axis limits
 plt.ylim(0.6, 1.0)
 
-# Grid and legend
+# grid and legend
 plt.grid(True)
 plt.legend(loc='lower right', frameon=True, edgecolor='black', fontsize=12)
 

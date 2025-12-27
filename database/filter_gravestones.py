@@ -14,7 +14,6 @@ con = psycopg.connect(
 
 cur = con.cursor()
 
-# Option 1: set search path (so table names need not be schema-qualified)
 cur.execute("SET search_path TO gravestones;")
 
 sql = "SELECT is_gravestone FROM gravestones.memorials WHERE fag_id = %s LIMIT 1"

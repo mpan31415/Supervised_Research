@@ -21,7 +21,7 @@ CKPT_NAME = "epoch_100.pth"
 TARGET_LABEL = "deathyear"
 PROBE_TYPE = "linear"       # OPTIONS: "linear", "nonlinear"
 
-BATCH_SIZE = 64            # Larger batch size possible for probing
+BATCH_SIZE = 64
 NUM_EPOCHS = 100
 SEED = 42
 TRAIN_SPLIT = 0.8
@@ -33,7 +33,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 seed_everything(SEED)
 
 # ---------------- DATA PREP ----------------
-# Standard Probing usually uses minimal augmentation to evaluate the raw features
 transform = transforms.Compose([transforms.ToTensor()])
 
 def make_sample(sample):
@@ -128,7 +127,6 @@ def evaluate(loader):
             if not mask.any(): continue
             
             img_a, img_b, y = img_a.to(DEVICE), img_b.to(DEVICE), y.to(DEVICE)
-            # Encoder is frozen, so we use it as a feature extractor
             z = torch.cat([encoder(img_a), encoder(img_b)], dim=1)
             logits = classifier(z).squeeze(1)
             

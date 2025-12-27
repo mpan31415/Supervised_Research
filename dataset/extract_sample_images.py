@@ -10,6 +10,7 @@ SAMPLE_IMAGES_DIR = "/cluster/work/lawecon_repo/gravestones/rep_learning_dataset
 NUM_IMAGES_TO_SAVE = 1000
 # ----------------
 
+####################################################################################
 def list_images_in_tar(tar_path):
     """Counts and prints the number of image files in a tar archive."""
     tar_path = Path(tar_path)
@@ -32,9 +33,10 @@ def list_images_in_tar(tar_path):
     print(f"Total image files in tar: {num_members}")
     print(f"Unique image file names in tar: {num_unique_names}")
     
-    return members # Return the list of members for potential reuse
+    return members
 
-# --- NEW FUNCTION ---
+
+####################################################################################
 def extract_sample_images(tar_path, output_dir, num_to_save, image_exts):
     """
     Extracts a specified number of image files from a tar archive 
@@ -47,7 +49,7 @@ def extract_sample_images(tar_path, output_dir, num_to_save, image_exts):
         print(f"Extraction Error: {tar_path} does not exist")
         return
 
-    # 1. Create the output directory if it doesn't exist
+    # create the output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nSaving sample images to: {output_dir}")
 
@@ -56,17 +58,14 @@ def extract_sample_images(tar_path, output_dir, num_to_save, image_exts):
     try:
         with tarfile.open(tar_path, "r") as tar_in:
             for member in tar_in.getmembers():
-                # 2. Check if the member is a file and has an eligible image extension
+                # check if the member is a file and has an eligible image extension
                 if member.isfile() and os.path.splitext(member.name)[1].lower() in image_exts:
                     
-                    # 3. Define the destination path
-                    # We use the basename to ensure a clean filename in the output directory
+                    # define the destination path
                     file_name = os.path.basename(member.name)
                     dest_path = output_dir / file_name
 
-                    # 4. Extract the file
-                    # We use extractfile and write the content to avoid potential security issues 
-                    # from tarfile.extractall if the archive came from an untrusted source.
+                    # extract the file
                     print(f"Extracting: {file_name}")
                     file_handle = tar_in.extractfile(member)
                     if file_handle:
@@ -74,12 +73,11 @@ def extract_sample_images(tar_path, output_dir, num_to_save, image_exts):
                             outfile.write(file_handle.read())
                         count += 1
                     
-                    # 5. Stop once the target number of images has been saved
+                    # stop once the target number of images has been saved
                     if count >= num_to_save:
                         print(f"Successfully saved {count} sample images.")
                         break
             else:
-                # This executes if the loop finishes without hitting the break (i.e., less than num_to_save were found)
                 print(f"Finished archive. Saved a total of {count} sample images.")
 
     except tarfile.TarError as e:
@@ -93,8 +91,6 @@ if __name__ == "__main__":
     dir_name = Path(TAR_PATH).parent.name
     print(f"Directory name of the tar file: {dir_name}")
 
-    # First, list the total images (original functionality)
     list_images_in_tar(TAR_PATH) 
 
-    # Second, extract the sample images (new functionality)
     extract_sample_images(TAR_PATH, SAMPLE_IMAGES_DIR, NUM_IMAGES_TO_SAVE, IMAGE_EXTS)

@@ -33,27 +33,24 @@ def load_images_as_tensors(sample_dir, image_exts):
 
     if not sample_path.exists():
         print(f"Error: Directory not found: {sample_path}")
-        # Terminate gracefully if the source directory doesn't exist
         sys.exit(1)
 
-    # 1. Define the transformation pipeline
-    # ToTensor() converts a PIL Image (H x W x C, range 0-255) 
-    # to a FloatTensor (C x H x W, range 0.0-1.0)
+    # define the transformation pipeline
     transform = transforms.ToTensor()
 
     image_tensors = []
     
-    # 2. Iterate over files in the directory
+    # iterate over files in the directory
     print(f"Searching for images in: {sample_dir}")
     for file_path in sample_path.iterdir():
-        # Check if the file has an eligible image extension
+        # check if the file has an eligible image extension
         if file_path.is_file() and file_path.suffix.lower() in image_exts:
             
             try:
-                # 3. Load the image using PIL
+                # load the image using PIL
                 img = Image.open(file_path)
                 
-                # 4. Apply the transformation to get a PyTorch Tensor
+                # apply the transformation to get a PyTorch Tensor
                 tensor = transform(img)
                 
                 image_tensors.append(tensor)

@@ -17,7 +17,7 @@ from dataset.utils import load_images_as_tensors
 
 # set plotting style
 plt.style.use(['science', 'ieee'])
-# Disable the requirement for a system LaTeX installation
+# disable the requirement for a system LaTeX installation
 plt.rcParams.update({
     "text.usetex": False,
 })
@@ -41,13 +41,13 @@ plot_save_dir = str(project_root) + "/plots/" + model_type + "/"
 
 
 ################## 1. LOAD DATA ##################
-# Load all images and convert them to tensors
+# load all images and convert them to tensors
 image_tensors_list = load_images_as_tensors(SAMPLE_IMAGES_DIR, IMAGE_EXTS)
 num_loaded = len(image_tensors_list)
 print(f"\n--- Summary ---")
 print(f"Successfully loaded and converted **{num_loaded}** images to PyTorch tensors.")
 if num_loaded > 0:
-    # Check the type and shape of the first tensor
+    # check the type and shape of the first tensor
     first_tensor = image_tensors_list[0]
     print(f"Type of first element: **{type(first_tensor)}**")
     print(f"Shape of first tensor (C, H, W): **{first_tensor.shape}**")
