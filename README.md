@@ -7,6 +7,7 @@ This repository contains code, scripts, and resources for performing representat
 
 - [Supervised Research (Law, Economics and Data Science)](#supervised-research-law-economics-and-data-science)
   - [Table of Contents](#table-of-contents)
+  - [Dataset](#dataset)
   - [Repository Structure](#repository-structure)
   - [Installation](#installation)
     - [Prerequisites](#prerequisites)
@@ -15,6 +16,19 @@ This repository contains code, scripts, and resources for performing representat
     - [Train a Model](#train-a-model)
     - [Evaluate a Model](#evaluate-a-model)
   - [Visualization](#visualization)
+
+
+## Dataset
+
+All data is found in the `/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/` directory. Here, we detail the content of each of the subdirectories.
+
+| Subdirectory | Content Description |
+| ---- | ---- |
+| `/shards` | The main dataset of 2 million images, stored across 1000 shards of 2000 images each |
+| `/sample_images` | Smaller set of 1000 images used for PCA visualizations |
+| `/labeled_shards` | The dataset of 10k images used for downstream task performance analysis |
+| `/checkpoints` | Checkpoints of trained encoders |
+| `/plots` | Example plots generated using the trained encoders |
 
 
 ## Repository Structure
@@ -34,12 +48,6 @@ Supervised_Research/
 ├── slurm_scripts/            # SLURM job scripts for HPC environments
 ├── requirements.txt          # Python dependencies
 └── README.md                 # Project documentation
-```
-
-Note, the following are found in the ``/cluster/work/lawecon_repo/gravestones/rep_learning_dataset/`` directory:
-```
-├── checkpoints/              # Checkpoints of trained models
-├── plots/                    # Plots generated using pretrained models
 ```
 
 
